@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Generated benchmark datasets
+public/datasets/lightfastgrid-*.json
+src/gridDemo/schemas/*.json
+!src/gridDemo/schemas/ag-grid-100000x22-with-columns.json
+!src/gridDemo/schemas/lightfastgrid-customer-operations-1k.json
+!src/gridDemo/schemas/grid-demo-datasets.json
+
+# Editor directories and files
+.claude/*
+!.claude/settings.local.json
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

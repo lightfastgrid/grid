@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.package-output.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  }
+}

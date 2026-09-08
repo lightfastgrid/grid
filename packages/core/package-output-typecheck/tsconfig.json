@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.package-output.json",
+  "include": ["*.ts"]
+}

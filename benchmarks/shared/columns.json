@@ -1,0 +1,27 @@
+{
+  "columnWidthPx": 150,
+  "baseColumns": [
+    { "field": "id", "headerName": "ID", "kind": "id" },
+    { "field": "name", "headerName": "Name", "kind": "text", "pool": "names" },
+    { "field": "email", "headerName": "Email", "kind": "text", "pool": "emails" },
+    { "field": "company", "headerName": "Company", "kind": "text", "pool": "companies" },
+    { "field": "city", "headerName": "City", "kind": "text", "pool": "cities" },
+    { "field": "country", "headerName": "Country", "kind": "text", "pool": "countries" },
+    { "field": "region", "headerName": "Region", "kind": "text", "pool": "regions" },
+    { "field": "department", "headerName": "Department", "kind": "text", "pool": "departments" },
+    { "field": "status", "headerName": "Status", "kind": "status", "pool": "statuses" },
+    { "field": "category", "headerName": "Category", "kind": "status", "pool": "categories" },
+    { "field": "priority", "headerName": "Priority", "kind": "status", "pool": "priorities" },
+    { "field": "amount", "headerName": "Amount", "kind": "number", "min": 10, "max": 99999 },
+    { "field": "quantity", "headerName": "Quantity", "kind": "number", "min": 1, "max": 500 },
+    { "field": "score", "headerName": "Score", "kind": "number", "min": 0, "max": 100 },
+    { "field": "rating", "headerName": "Rating", "kind": "number", "min": 1, "max": 5 },
+    { "field": "createdAt", "headerName": "Created", "kind": "date" },
+    { "field": "updatedAt", "headerName": "Updated", "kind": "date" },
+    { "field": "dueDate", "headerName": "Due date", "kind": "date" },
+    { "field": "notes", "headerName": "Notes", "kind": "text", "pool": "notes" },
+    { "field": "code", "headerName": "Code", "kind": "text", "pool": "codes" }
+  ],
+  "extraFieldPrefix": "extra",
+  "extraKindCycle": ["text", "number", "date", "status"]
+}

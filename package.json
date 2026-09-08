@@ -1,0 +1,53 @@
+{
+  "name": "lightfastgrid",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "pnpm -r --if-present run test",
+    "benchmark:accessibility-scroll": "pnpm --filter @lightfastgrid/core run benchmark:accessibility-scroll",
+    "lint": "eslint \"packages/**/*.{ts,tsx}\" \"apps/**/*.{ts,tsx}\" \"scripts/eslint/**/*.mjs\"",
+    "lint:fix": "eslint \"packages/**/*.{ts,tsx}\" \"apps/**/*.{ts,tsx}\" \"scripts/eslint/**/*.mjs\" --fix",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "typecheck:package-output": "pnpm --filter @lightfastgrid/core run typecheck:package-output && pnpm --filter @lightfastgrid/react run typecheck:package-output",
+    "build:packages": "pnpm --filter @lightfastgrid/core run build && pnpm --filter @lightfastgrid/react run build",
+    "benchmark:prepare": "node benchmarks/scripts/prepare-local-packages.mjs",
+    "benchmark:build": "node benchmarks/scripts/build-all.mjs",
+    "benchmark:bundle-sizes": "node benchmarks/scripts/measure-bundles.mjs",
+    "benchmark:runtime": "node --experimental-strip-types benchmarks/scripts/run-runtime.mjs publish",
+    "benchmark:runtime:smoke": "node --experimental-strip-types benchmarks/scripts/run-runtime.mjs smoke",
+    "benchmark:runtime:native": "node --experimental-strip-types benchmarks/scripts/run-runtime.mjs publish-native",
+    "benchmark:runtime:trace": "node --experimental-strip-types benchmarks/scripts/run-runtime.mjs trace",
+    "benchmark:runtime:install": "node benchmarks/scripts/install-runtime-browser.mjs",
+    "benchmark:verify": "node benchmarks/scripts/verify.mjs",
+    "validate": "pnpm run lint && pnpm run typecheck",
+    "validate:fix": "pnpm run lint:fix && pnpm run typecheck",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run build:packages && pnpm run typecheck:package-output && pnpm run test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "pnpm": {
+    "overrides": {
+      "@types/react": "^19.2.14",
+      "@types/react-dom": "^19.2.3"
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.59.1",
+    "@typescript-eslint/parser": "^8.59.1",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "globals": "^17.5.0",
+    "typescript-eslint": "^8.58.2"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@lightfastgrid/shared",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./vite.config.base.mjs",
+  "exports": {
+    "./vite": "./vite.config.base.mjs"
+  },
+  "devDependencies": {
+    "vite": "^8.0.10",
+    "vite-plugin-dts": "^4.5.0",
+    "terser": "^5.31.0"
+  }
+}

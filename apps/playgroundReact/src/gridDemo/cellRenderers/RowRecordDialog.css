@@ -1,0 +1,180 @@
+.row-record-dialog-backdrop {
+  --rrd-backdrop: rgba(2, 9, 20, 0.72);
+  --rrd-bg: #0b1220;
+  --rrd-border: rgba(148, 163, 184, 0.22);
+  --rrd-text: #e2e8f0;
+  --rrd-title: #f8fafc;
+  --rrd-muted: #94a3b8;
+  --rrd-field-bg: #020914;
+  --rrd-field-border: rgba(148, 163, 184, 0.28);
+  --rrd-field-text: #f1f5f9;
+  --rrd-focus: rgba(96, 165, 250, 0.7);
+  --rrd-focus-border: rgba(96, 165, 250, 0.55);
+  --rrd-hover: rgba(148, 163, 184, 0.12);
+  --rrd-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --rrd-accent: #2563ff;
+  --rrd-accent-hover: #1d4ed8;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--rrd-backdrop);
+}
+
+.grid-demo--light .row-record-dialog-backdrop {
+  color-scheme: light;
+  --rrd-backdrop: rgba(28, 31, 38, 0.4);
+  --rrd-bg: #ffffff;
+  --rrd-border: rgba(28, 31, 38, 0.12);
+  --rrd-text: #1c1f26;
+  --rrd-title: #111827;
+  --rrd-muted: #6b7280;
+  --rrd-field-bg: #f7f8fa;
+  --rrd-field-border: rgba(28, 31, 38, 0.14);
+  --rrd-field-text: #1c1f26;
+  --rrd-focus: rgba(37, 99, 255, 0.55);
+  --rrd-focus-border: rgba(37, 99, 255, 0.45);
+  --rrd-hover: rgba(28, 31, 38, 0.06);
+  --rrd-shadow: 0 18px 48px rgba(28, 31, 38, 0.16);
+  --rrd-accent: #2563ff;
+  --rrd-accent-hover: #1d4ed8;
+}
+
+.row-record-dialog {
+  width: min(420px, 100%);
+  box-sizing: border-box;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--rrd-border);
+  border-radius: 10px;
+  background: var(--rrd-bg);
+  color: var(--rrd-text);
+  text-align: left;
+  box-shadow: var(--rrd-shadow);
+  font-family: var(
+    --lfg-font-family,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  font-size: var(--lfg-font-size, 14px);
+}
+
+.row-record-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.row-record-dialog-header h2 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--rrd-title);
+}
+
+.row-record-dialog-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--rrd-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.row-record-dialog-icon-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rrd-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.row-record-dialog-icon-btn:hover {
+  background: var(--rrd-hover);
+  color: var(--rrd-title);
+}
+
+.row-record-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row-record-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--rrd-muted);
+}
+
+.row-record-dialog-field input,
+.row-record-dialog-field select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rrd-field-border);
+  border-radius: 6px;
+  background: var(--rrd-field-bg);
+  color: var(--rrd-field-text);
+  font: inherit;
+}
+
+.row-record-dialog-field input:read-only,
+.row-record-dialog-field select:disabled {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.row-record-dialog-field input:focus,
+.row-record-dialog-field select:focus {
+  outline: 1px solid var(--rrd-focus);
+  border-color: var(--rrd-focus-border);
+}
+
+.row-record-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.row-record-dialog-footer button {
+  min-width: 78px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--rrd-field-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rrd-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.row-record-dialog-footer button:hover {
+  background: var(--rrd-hover);
+}
+
+.row-record-dialog-primary {
+  border-color: transparent !important;
+  background: var(--rrd-accent) !important;
+  color: #fff !important;
+}
+
+.row-record-dialog-primary:hover {
+  background: var(--rrd-accent-hover) !important;
+}

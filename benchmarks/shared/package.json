@@ -1,0 +1,19 @@
+{
+  "name": "@lfg-benchmarks/shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./neutral": "./src/neutral.ts",
+    "./bundle": "./src/bundle.ts",
+    "./react-shell": "./src/react-shell.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  }
+}

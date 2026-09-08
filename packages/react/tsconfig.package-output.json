@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {},
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "skipLibCheck": false
+  },
+  "include": ["package-output-typecheck/**/*.tsx"]
+}

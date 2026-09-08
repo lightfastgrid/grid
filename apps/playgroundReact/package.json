@@ -1,0 +1,41 @@
+{
+  "name": "playground-react",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc -b --noEmit",
+    "preview": "vite preview",
+    "test": "pnpm run test:grid-demo-dataset && pnpm run test:grid-demo-interactive",
+    "transform:grid-demo-dataset": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
+    "transform:grid-demo-dataset:smoke": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
+    "generate:grid-demo-dataset:1k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
+    "generate:grid-demo-dataset:10k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 10000",
+    "generate:grid-demo-dataset:100k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 100000",
+    "test:grid-demo-dataset": "node --test src/gridDemo/schemas/transform-dataset.test.mjs",
+    "test:grid-demo-interactive": "node --experimental-strip-types --test src/gridDemo/InteractiveDemo/**/*.test.ts"
+  },
+  "dependencies": {
+    "@lightfastgrid/core": "workspace:*",
+    "@lightfastgrid/react": "workspace:*",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.10"
+  }
+}

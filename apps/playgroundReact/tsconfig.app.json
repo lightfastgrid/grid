@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "jsx": "react-jsx",
+    "paths": {
+      "@lightfastgrid/core": ["../../packages/core/src/index.ts"],
+      "@lightfastgrid/core/themes/default.css": ["../../packages/core/src/themes/default.css"],
+      "@lightfastgrid/react": ["../../packages/react/src/index.ts"]
+    },
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force"
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

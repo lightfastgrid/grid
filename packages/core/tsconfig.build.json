@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": [],
+    "baseUrl": ".",
+    "paths": {},
+    "rootDir": "src",
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/__typechecks__/**",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "dist",
+    "node_modules"
+  ]
+}

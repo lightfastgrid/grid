@@ -1,0 +1,29 @@
+{
+  "seed": 20260906,
+  "scenarios": {
+    "normal": {
+      "rowCount": 10000,
+      "columnCount": 20,
+      "datasetSha256": "effd2a0a99eb88890199b2e7b56f207fb4427fe88c53129f2d47f2ab480a9a55",
+      "columnSchemaSha256": "d8f04378f859ef2fbec2f38cbe8aa3105df2302cdb85b56fd7dcf7e0f823188f"
+    },
+    "large-rows": {
+      "rowCount": 200000,
+      "columnCount": 20,
+      "datasetSha256": "d97b66ad9012b806f061f8b992055ea1e548a583450fb00631eb60668d5f290c",
+      "columnSchemaSha256": "d8f04378f859ef2fbec2f38cbe8aa3105df2302cdb85b56fd7dcf7e0f823188f"
+    },
+    "runtime-publish": {
+      "rowCount": 100000,
+      "columnCount": 50,
+      "datasetSha256": "8d37ba73bb465a0ce5670525ee139cbc15682397ca7c08bfbd8466c27edfe79b",
+      "columnSchemaSha256": "4f815e38cc382596ccfd071e01929887943bb2dd0dcc0c696d6438045235b7d4"
+    },
+    "wide": {
+      "rowCount": 10000,
+      "columnCount": 100,
+      "datasetSha256": "26ac358bf164a5d29482eb915a18408000dcfbfeee7144ed04c66a9377747bf2",
+      "columnSchemaSha256": "ac9c7d5a25eab378fe16d904267f1b97816cf36ef9c04febd0f01e9510fba29f"
+    }
+  }
+}

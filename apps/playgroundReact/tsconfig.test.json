@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@lightfastgrid/core": ["../../packages/core/src/index.ts"],
+      "@lightfastgrid/core/themes/default.css": ["../../packages/core/src/themes/default.css"],
+      "@lightfastgrid/react": ["../../packages/react/src/index.ts"]
+    },
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force"
+  },
+  "include": ["src/**/*.test.ts", "src/vite-env.d.ts"]
+}

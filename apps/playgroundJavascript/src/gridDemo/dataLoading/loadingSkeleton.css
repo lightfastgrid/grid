@@ -1,0 +1,143 @@
+/**
+ * Full-bleed loading skeleton — host class from gridDemoOverlays.ts.
+ * Default `.lfg-overlay` is a centered card (max 420px); these rules reset it.
+ * Colors follow grid theme tokens so light/dark stay consistent.
+ */
+.lfg-overlay.grid-demo-loading-skeleton {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: var(--lfg-bg, var(--lfg-color-bg, #0b1120));
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.grid-loading-skeleton {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.grid-loading-skeleton-status {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--lfg-overlay-fg, var(--lfg-color-overlay-fg, var(--lfg-color-muted, #8b95a7)));
+  border-bottom: 1px solid var(--lfg-border, var(--lfg-color-border, #1e293b));
+}
+
+.grid-loading-skeleton-table {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.grid-loading-skeleton-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--lfg-border, var(--lfg-color-border, #1e293b));
+}
+
+.grid-loading-skeleton-group-row {
+  height: var(--lfg-header-height, 32px);
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg, #0b1120));
+}
+
+.grid-loading-skeleton-header-row {
+  height: var(--lfg-header-height, 32px);
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg, #0b1120));
+}
+
+.grid-loading-skeleton-body-row {
+  height: var(--lfg-row-height, 28px);
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg, #0b1120)));
+}
+
+.grid-loading-skeleton-group {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  min-width: 0;
+  border-right: 1px solid var(--lfg-border, var(--lfg-color-border, #1e293b));
+}
+
+.grid-loading-skeleton-group:last-child {
+  border-right: none;
+}
+
+.grid-loading-skeleton-cell {
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+}
+
+.grid-loading-skeleton-bar {
+  display: block;
+  height: 10px;
+  width: 55%;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 16%, transparent) 0%,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 36%, transparent) 50%,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 16%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: grid-loading-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.grid-loading-skeleton-bar-wide {
+  width: 72%;
+}
+
+.grid-loading-skeleton-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  height: var(--lfg-pagination-height, 40px);
+  border-top: 1px solid var(--lfg-border, var(--lfg-color-border, #1e293b));
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg, #0b1120));
+}
+
+.grid-loading-skeleton-footer .grid-loading-skeleton-bar {
+  width: 40%;
+}
+
+.grid-loading-skeleton-footer-pages {
+  display: flex;
+  gap: 6px;
+}
+
+.grid-loading-skeleton-page {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 16%, transparent) 0%,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 36%, transparent) 50%,
+    color-mix(in srgb, var(--lfg-color-muted, #8b95a7) 16%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: grid-loading-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes grid-loading-skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

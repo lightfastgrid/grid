@@ -1,0 +1,43 @@
+{
+  "seed": 20260906,
+  "defaultScenario": "normal",
+  "scenarios": {
+    "normal": {
+      "label": "Normal",
+      "rowCount": 10000,
+      "columnCount": 20,
+      "optIn": false,
+      "memoryIntensive": false
+    },
+    "large-rows": {
+      "label": "Large rows",
+      "rowCount": 200000,
+      "columnCount": 20,
+      "optIn": false,
+      "memoryIntensive": false
+    },
+    "runtime-publish": {
+      "label": "Runtime publish",
+      "rowCount": 100000,
+      "columnCount": 50,
+      "optIn": false,
+      "memoryIntensive": false,
+      "note": "Canonical public runtime dataset: 100,000 rows × 50 columns. 100k is above the 25,000-row LightFastGrid Worker eligibility threshold; eligibility is not producer proof."
+    },
+    "wide": {
+      "label": "Wide",
+      "rowCount": 10000,
+      "columnCount": 100,
+      "optIn": false,
+      "memoryIntensive": false
+    },
+    "extreme": {
+      "label": "Extreme",
+      "rowCount": 200000,
+      "columnCount": 100,
+      "optIn": true,
+      "memoryIntensive": true,
+      "note": "Memory-intensive. Requires explicit selection. Not run automatically."
+    }
+  }
+}

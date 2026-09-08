@@ -1,0 +1,15 @@
+node_modules
+.pnpm-debug.log*
+apps/*/dist
+apps/*/node_modules
+shared/node_modules
+artifacts/*
+!artifacts/.gitkeep
+results/*
+!results/.gitkeep
+!results/runtime/
+results/runtime/*
+!results/runtime/.gitkeep
+test-results
+playwright-report
+blob-report

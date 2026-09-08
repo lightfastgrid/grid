@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "shared"
+
+overrides:
+  "@lightfastgrid/core": "file:./artifacts/lightfastgrid-core.tgz"
+  "@lightfastgrid/react": "file:./artifacts/lightfastgrid-react.tgz"

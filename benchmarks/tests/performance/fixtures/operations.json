@@ -1,0 +1,57 @@
+{
+  "note": "Shared operation arguments. Smoke/publish/trace iteration counts live in profiles.ts, not here.",
+  "sort": {
+    "field": "name",
+    "direction": "asc"
+  },
+  "filter": {
+    "field": "status",
+    "value": "Active",
+    "note": "Compatibility wrapper only. Recorded identities are the isolated filter operations below."
+  },
+  "filters": {
+    "text": {
+      "field": "status",
+      "kind": "text",
+      "operator": "contains",
+      "value": "Active"
+    },
+    "numberRange": {
+      "field": "amount",
+      "kind": "number",
+      "operator": "between",
+      "minimum": 25000,
+      "maximum": 75000,
+      "inclusive": true
+    },
+    "combined": {
+      "logic": "and",
+      "conditions": [
+        { "field": "status", "kind": "text", "operator": "contains", "value": "Active" },
+        { "field": "amount", "kind": "number", "operator": "between", "minimum": 25000, "maximum": 75000, "inclusive": true }
+      ]
+    },
+    "typing": {
+      "field": "name",
+      "kind": "text",
+      "operator": "contains",
+      "prefixes": ["P", "Pa", "Pat", "Pate", "Patel"],
+      "intervalMs": 120,
+      "finalText": "Patel"
+    }
+  },
+  "quickSearch": {
+    "text": "Patel"
+  },
+  "quickSearchTyping": {
+    "prefixes": ["P", "Pa", "Pat", "Pate", "Patel"],
+    "intervalMs": 120
+  },
+  "quickSearchPriming": {
+    "text": "Morgan"
+  },
+  "scrollTo": {
+    "top": 10000,
+    "left": 0
+  }
+}

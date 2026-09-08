@@ -1,0 +1,3794 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * LightFastGrid — default theme (default.css)
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * This is the default LightFastGrid theme. It ships the grid's baseline
+ * look and the layout-critical rules the renderer depends on.
+ *
+ * Customizing from an app:
+ *   - Override the documented public `--lfg-*` design tokens and target the
+ *     stable `lfg-*` class names. These are the supported surface.
+ *   - Semantic tokens (`--lfg-color-*`, `--lfg-font-*`, `--lfg-radius-*`)
+ *     are the recommended customization layer. Set them on `.lfg-grid` or an
+ *     ancestor; for example `--lfg-color-border: #334155`.
+ *   - Legacy tokens (`--lfg-border`, `--lfg-header-bg`, etc.) remain supported
+ *     and take precedence when set, so existing overrides keep working.
+ *   - The guided theme object API (`theme={{ base, accentColor, radius, density }}`)
+ *     centralizes token generation — see `resolveGridTheme`.
+ *   - Do NOT manually override renderer-owned layout variables
+ *     (`--lfg-total-width`, `--lfg-left-pinned-width`, `--lfg-right-pinned-width`,
+ *     `--lfg-viewport-height`, `--lfg-row-height`, `--lfg-header-height`,
+ *     `--lfg-floating-filter-height`, `--lfg-row-pinned-top-height`,
+ *     `--lfg-row-pinned-bottom-height`, `--lfg-header-control-count`, …).
+ *     The renderer writes these every frame; manual values will be clobbered
+ *     and can break sticky/virtualization geometry.
+ *
+ * Section map:
+ *    1. File header (this block)
+ *    2. Root and theme variables
+ *    3. Core layout (viewport, header, rows, cells)
+ *    4. Header and column controls
+ *    5. Selection and focus states
+ *    6. Column pinning
+ *    7. Row drag and row ordering
+ *    8. Row pinning
+ *    9. Floating surfaces and menus
+ *   10. Cell shells
+ *   11. Tooltip
+ *   12. Overlays
+ *   13. Pagination footer
+ *
+ * Media queries: there is no separate media-query section. The only
+ * media queries are `prefers-color-scheme: dark`, kept beside the rules
+ * they affect (root token overrides in §2; pinned/row-pinned cell
+ * backgrounds in §6 and §8). See the closing note at the end of file.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 2. ROOT AND THEME VARIABLES
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Semantic tokens (the recommended customization layer):
+ *   --lfg-color-bg, --lfg-color-surface, --lfg-color-surface-muted,
+ *   --lfg-color-header-bg, --lfg-color-border, --lfg-color-text,
+ *   --lfg-color-muted, --lfg-color-accent, --lfg-color-accent-fg,
+ *   --lfg-color-selected-row, --lfg-color-selected-column, --lfg-color-overlay-bg,
+ *   --lfg-color-overlay-fg, --lfg-color-tooltip-bg, --lfg-color-tooltip-fg,
+ *   --lfg-color-invalid, --lfg-border-width,
+ *   --lfg-cell-padding-x, --lfg-cell-padding-y,
+ *   --lfg-floating-filter-height,
+ *   --lfg-checkbox-size, --lfg-checkbox-radius, --lfg-checkbox-border,
+ *   --lfg-checkbox-bg-checked, --lfg-checkbox-check-fg,
+ *   --lfg-pagination-button-fg, --lfg-pagination-button-bg,
+ *   --lfg-pagination-button-hover-fg, --lfg-pagination-button-hover-bg,
+ *   --lfg-pagination-button-active-fg, --lfg-pagination-button-active-bg,
+ *   --lfg-pagination-button-active-hover-fg, --lfg-pagination-button-active-hover-bg,
+ *   --lfg-font-family, --lfg-font-size, --lfg-cell-text-align,
+ *   --lfg-radius-grid, --lfg-radius-control, --lfg-radius-menu,
+ *   --lfg-radius-tooltip,
+ *   --lfg-popup-bg, --lfg-popup-fg, --lfg-popup-border, --lfg-popup-radius,
+ *   --lfg-popup-shadow (shared floating panel chrome),
+ *   --lfg-badge-{tone}-bg, --lfg-badge-{tone}-fg, --lfg-badge-{tone}-dot,
+ *   --lfg-badge-{tone}-border
+ *   (tones: active, pending, inactive, success, warning, danger, neutral),
+ *   --lfg-column-menu-icon-color, --lfg-filter-trigger-icon-color.
+ *
+ * Legacy tokens (still supported; take precedence when set):
+ *   --lfg-border, --lfg-bg, --lfg-fg, --lfg-header-bg, --lfg-cell-focus,
+ *   --lfg-row-bg, --lfg-row-selected-bg, --lfg-column-selected-bg,
+ *   --lfg-column-selected-header-bg, --lfg-row-drop-line,
+ *   --lfg-drag-handle-color, --lfg-tooltip-bg, --lfg-tooltip-color,
+ *   --lfg-overlay-bg, --lfg-overlay-fg.
+ *
+ * Derived tokens (computed from legacy ones; defined on `.lfg-grid` below):
+ *   --lfg-column-drop-line, --lfg-column-drop-line-glow.
+ */
+
+/* ── Root ── */
+.lfg-grid {
+  position: relative;
+  /* Fill adapter/container height; inner virtual scroll height is still JS (row count). */
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* ── Semantic design tokens ──
+   * Foundation for theme APIs. Override these on `.lfg-grid` (or an ancestor)
+   * to retheme without touching individual component rules. Legacy `--lfg-*`
+   * tokens take precedence when set, so existing overrides keep working. */
+
+  --lfg-column-menu-icon-color: #ffffff;
+  --lfg-filter-trigger-icon-color: #ffffff;
+  --lfg-header-trigger-size: 20px;
+  --lfg-header-trigger-icon-size: 14px;
+  --lfg-header-controls-gap: 4px;
+
+  --lfg-font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --lfg-font-size: 14px;
+  --lfg-cell-text-align: left;
+
+  --lfg-radius-grid: 0;
+  --lfg-radius-control: 3px;
+  --lfg-radius-menu: 8px;
+  --lfg-radius-tooltip: 4px;
+  --lfg-border-width: 1px;
+  --lfg-border: #182030;
+
+  /* Shared floating panel chrome (filter, column menu, row/cell menus).
+   * Override these once to keep every dropdown visually consistent. */
+  --lfg-popup-bg: var(--lfg-color-surface, #151C2E);
+  --lfg-popup-fg: var(--lfg-color-text, #cccccc);
+  --lfg-popup-border: var(--lfg-color-border, #1E293B);
+  --lfg-popup-radius: var(--lfg-radius-menu, 8px);
+  --lfg-popup-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Column menu (⋯) dropdown panel — defaults to shared popup chrome. */
+  --lfg-column-menu-panel-bg: var(--lfg-popup-bg);
+  --lfg-column-menu-panel-fg: var(--lfg-popup-fg);
+  --lfg-column-menu-panel-border: var(--lfg-popup-border);
+  --lfg-column-menu-panel-radius: var(--lfg-popup-radius);
+  --lfg-column-menu-panel-shadow: var(--lfg-popup-shadow);
+  --lfg-column-menu-panel-width: 248px;
+  --lfg-column-menu-panel-padding-y: 6px;
+  --lfg-column-menu-item-font-size: 13px;
+  --lfg-column-menu-item-gap: 10px;
+  --lfg-column-menu-item-inset-x: 6px;
+  --lfg-column-menu-item-padding-x: 10px;
+  --lfg-column-menu-item-padding-y: 7px;
+  --lfg-column-menu-item-radius: 6px;
+  --lfg-column-menu-item-icon-size: 16px;
+  --lfg-column-menu-item-icon-fg: var(--lfg-column-menu-panel-fg, var(--lfg-popup-fg));
+  --lfg-column-menu-item-hover-bg: color-mix(
+    in srgb,
+    var(--lfg-color-accent, #2563FF) 18%,
+    transparent
+  );
+  --lfg-column-menu-separator: var(--lfg-column-menu-panel-border, var(--lfg-popup-border));
+  --lfg-column-menu-separator-margin-x: 12px;
+  --lfg-column-menu-separator-margin-y: 5px;
+
+  --lfg-cell-padding-x: 12px;
+  --lfg-cell-padding-y: 8px;
+  --lfg-floating-filter-height: var(--lfg-row-height, 40px);
+  --lfg-checkbox-size: 17px;
+  --lfg-checkbox-radius: 5px;
+  --lfg-checkbox-border: rgba(148, 163, 184, 0.85);
+  --lfg-checkbox-bg-checked: var(--lfg-color-accent, #2563FF);
+  --lfg-checkbox-check-fg: var(--lfg-color-accent-fg, #ffffff);
+  --lfg-pagination-button-fg: rgba(189, 189, 189, 0.7);
+  --lfg-pagination-button-bg: transparent;
+  --lfg-pagination-button-hover-fg: var(--lfg-color-text, #cccccc);
+  --lfg-pagination-button-hover-bg: rgba(148, 163, 184, 0.14);
+  --lfg-pagination-button-active-bg: var(--lfg-color-accent, #2563FF);
+  --lfg-pagination-button-active-fg: var(--lfg-color-accent-fg, #ffffff);
+  --lfg-pagination-button-active-hover-bg: color-mix(
+    in srgb,
+    var(--lfg-pagination-button-active-bg, var(--lfg-color-accent, #2563FF)) 88%,
+    black
+  );
+  --lfg-pagination-button-active-hover-fg: var(--lfg-pagination-button-active-fg, #ffffff);
+  --lfg-row-selected-bg: var(--lfg-color-selected-row, #111B33);
+  --lfg-column-selected-bg: var(--lfg-color-selected-column, #111B33);
+  --lfg-column-selected-header-bg: var(--lfg-color-selected-column, #111B33);
+
+  /* Filter dropdown — panel chrome defaults to shared popup tokens. */
+  --lfg-filter-panel-bg: var(--lfg-popup-bg);
+  --lfg-filter-panel-fg: var(--lfg-popup-fg);
+  --lfg-filter-panel-muted: var(--lfg-color-muted, #8B95A7);
+  --lfg-filter-panel-border: var(--lfg-popup-border);
+  --lfg-filter-panel-radius: var(--lfg-popup-radius);
+  --lfg-filter-panel-shadow: var(--lfg-popup-shadow);
+  --lfg-filter-panel-width: 240px;
+  --lfg-filter-panel-padding: 10px;
+  --lfg-filter-panel-gap: 8px;
+  --lfg-filter-field-gap: 3px;
+  --lfg-filter-control-bg: color-mix(
+    in srgb,
+    var(--lfg-filter-panel-bg, #151C2E) 82%,
+    black
+  );
+  --lfg-filter-control-border: var(--lfg-filter-panel-border, #1E293B);
+  --lfg-filter-control-radius: 5px;
+  --lfg-filter-control-padding-x: 8px;
+  --lfg-filter-control-padding-y: 5px;
+  --lfg-filter-control-font-size: 12px;
+  --lfg-filter-join-padding-y: 2px;
+  --lfg-filter-join-padding-x: 10px;
+  --lfg-filter-join-min-width: 2.75rem;
+  --lfg-filter-label-fg: var(--lfg-filter-panel-muted, #8B95A7);
+  --lfg-filter-label-font-size: 11px;
+  --lfg-filter-divider: var(--lfg-filter-panel-border, #1E293B);
+  --lfg-filter-accent: var(--lfg-color-accent, #3B82F6);
+  --lfg-filter-accent-fg: var(--lfg-color-accent-fg, #ffffff);
+  --lfg-filter-apply-bg: var(--lfg-filter-accent, #3B82F6);
+  --lfg-filter-apply-fg: var(--lfg-filter-accent-fg, #ffffff);
+  --lfg-filter-clear-bg: transparent;
+  --lfg-filter-clear-fg: var(--lfg-filter-panel-fg, #e8eef6);
+  --lfg-filter-list-max-height: 112px;
+  --lfg-filter-shell-img-width: 16px;
+  --lfg-filter-shell-img-height: 12px;
+  --lfg-filter-shell-avatar-size: 16px;
+  --lfg-filter-action-min-width: 72px;
+  --lfg-filter-action-height: 30px;
+  --lfg-filter-action-padding-x: 14px;
+  --lfg-filter-list-item-hover-bg: color-mix(
+    in srgb,
+    var(--lfg-filter-accent, #3B82F6) 12%,
+    transparent
+  );
+
+  /* ── Badge tone tokens (dark defaults; object theme API overrides inline) ── */
+  --lfg-badge-active-bg: rgba(37, 99, 255, 0.14);
+  --lfg-badge-active-fg: #60A5FA;
+  --lfg-badge-active-dot: #3B82F6;
+  --lfg-badge-active-border: rgba(59, 130, 246, 0.45);
+  --lfg-badge-pending-bg: rgba(234, 179, 8, 0.12);
+  --lfg-badge-pending-fg: #F5D76E;
+  --lfg-badge-pending-dot: #EAB308;
+  --lfg-badge-pending-border: rgba(234, 179, 8, 0.45);
+  --lfg-badge-inactive-bg: rgba(139, 149, 167, 0.12);
+  --lfg-badge-inactive-fg: #B0B8C7;
+  --lfg-badge-inactive-dot: #8B95A7;
+  --lfg-badge-inactive-border: rgba(139, 149, 167, 0.4);
+  --lfg-badge-success-bg: rgba(34, 197, 94, 0.12);
+  --lfg-badge-success-fg: #6EE7A0;
+  --lfg-badge-success-dot: #34D399;
+  --lfg-badge-success-border: rgba(52, 211, 153, 0.45);
+  --lfg-badge-warning-bg: rgba(249, 115, 22, 0.12);
+  --lfg-badge-warning-fg: #FB923C;
+  --lfg-badge-warning-dot: #F97316;
+  --lfg-badge-warning-border: rgba(249, 115, 22, 0.45);
+  --lfg-badge-danger-bg: rgba(239, 68, 68, 0.12);
+  --lfg-badge-danger-fg: #F87171;
+  --lfg-badge-danger-dot: #EF4444;
+  --lfg-badge-danger-border: rgba(239, 68, 68, 0.45);
+  --lfg-badge-neutral-bg: rgba(139, 149, 167, 0.1);
+  --lfg-badge-neutral-fg: #8B95A7;
+  --lfg-badge-neutral-dot: #8B95A7;
+  --lfg-badge-neutral-border: rgba(139, 149, 167, 0.35);
+
+  font-family: var(--lfg-font-family);
+  font-size: var(--lfg-font-size);
+  line-height: 1;
+  color: var(--lfg-color-text, currentColor);
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-radius: var(--lfg-radius-grid, 0);
+  /* Derived tokens — computed from the legacy --lfg-cell-focus token. */
+  --lfg-column-drop-line: var(--lfg-cell-focus, var(--lfg-color-accent));
+  --lfg-column-drop-line-glow: color-mix(
+    in srgb,
+    var(--lfg-column-drop-line, var(--lfg-color-accent)) 26%,
+    transparent
+  );
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lfg-grid[data-theme="dark"] {
+  color-scheme: dark;
+  --lfg-calendar-picker-filter: invert(1);
+  /* Brand: Deep Navy / Soft White / Steel Gray / Electric / Cobalt */
+  --lfg-color-bg: #0B1120;
+  --lfg-color-header-bg: #0B1120;
+  --lfg-color-surface: #151C2E;
+  --lfg-color-surface-muted: #101828;
+  --lfg-color-border: #1E293B;
+  --lfg-color-text: #cccccc;
+  --lfg-color-muted: #8B95A7;
+  --lfg-color-accent: #2563FF;
+  --lfg-color-accent-fg: #FFFFFF;
+  --lfg-color-selected-row: #111B33;
+  --lfg-color-selected-column: #111B33;
+  --lfg-pagination-button-fg: color-mix(
+    in srgb,
+    var(--lfg-color-muted, #8B95A7) 85%,
+    transparent
+  );
+  --lfg-pagination-button-hover-fg: #cccccc;
+  --lfg-pagination-button-hover-bg: rgba(139, 149, 167, 0.14);
+  --lfg-popup-bg: #151C2E;
+  --lfg-popup-fg: #cccccc;
+  --lfg-popup-border: #243044;
+  --lfg-filter-panel-muted: #8B95A7;
+  --lfg-filter-control-bg: #101828;
+  --lfg-filter-accent: #3B82F6;
+  --lfg-filter-accent-fg: #FFFFFF;
+  --lfg-column-menu-item-icon-fg: var(--lfg-popup-fg);
+  --lfg-column-menu-separator: var(--lfg-popup-border);
+}
+
+.lfg-grid[data-theme="light"] {
+  color-scheme: light;
+  --lfg-calendar-picker-filter: none;
+  /* Soft professional light canvas — quieter than pure white + slate borders. */
+  --lfg-color-bg: #ffffff;
+  --lfg-color-header-bg: #f7f8fa;
+  --lfg-color-surface: #f7f8fa;
+  --lfg-color-surface-muted: #eef0f3;
+  --lfg-color-border: #e6e8ec;
+  --lfg-border: #e6e8ec;
+  --lfg-color-text: #1c1f26;
+  --lfg-color-muted: #6b7280;
+  --lfg-color-accent: #2563FF;
+  --lfg-color-accent-fg: #ffffff;
+  --lfg-color-selected-row: #eef3ff;
+  --lfg-color-selected-column: #eef3ff;
+  --lfg-checkbox-border: #c9ced6;
+  --lfg-pagination-button-fg: #5b6472;
+  --lfg-pagination-button-hover-fg: #1c1f26;
+  --lfg-pagination-button-hover-bg: rgba(28, 31, 38, 0.05);
+  --lfg-column-menu-icon-color: #4b5563;
+  --lfg-filter-trigger-icon-color: #4b5563;
+  --lfg-popup-bg: #ffffff;
+  --lfg-popup-fg: #1c1f26;
+  --lfg-popup-border: #e6e8ec;
+  --lfg-popup-shadow: 0 10px 28px rgba(28, 31, 38, 0.1);
+  --lfg-filter-panel-muted: #6b7280;
+  --lfg-filter-control-bg: #f7f8fa;
+  --lfg-filter-control-border: #e6e8ec;
+  --lfg-filter-accent: #2563FF;
+  --lfg-filter-accent-fg: #ffffff;
+  --lfg-column-menu-item-icon-fg: var(--lfg-popup-fg);
+  --lfg-column-menu-separator: #eef0f3;
+  --lfg-column-menu-item-hover-bg: rgba(28, 31, 38, 0.04);
+
+  /* Outlined badges — softer borders so chips don't compete with grid lines. */
+  --lfg-badge-active-bg: rgba(37, 99, 255, 0.08);
+  --lfg-badge-active-fg: #1d4ed8;
+  --lfg-badge-active-dot: #2563FF;
+  --lfg-badge-active-border: rgba(37, 99, 255, 0.35);
+  --lfg-badge-pending-bg: rgba(202, 138, 4, 0.1);
+  --lfg-badge-pending-fg: #a16207;
+  --lfg-badge-pending-dot: #ca8a04;
+  --lfg-badge-pending-border: rgba(202, 138, 4, 0.4);
+  --lfg-badge-inactive-bg: rgba(107, 114, 128, 0.08);
+  --lfg-badge-inactive-fg: #4b5563;
+  --lfg-badge-inactive-dot: #6b7280;
+  --lfg-badge-inactive-border: rgba(107, 114, 128, 0.35);
+  --lfg-badge-success-bg: rgba(22, 163, 74, 0.1);
+  --lfg-badge-success-fg: #15803d;
+  --lfg-badge-success-dot: #16a34a;
+  --lfg-badge-success-border: rgba(22, 163, 74, 0.4);
+  --lfg-badge-warning-bg: rgba(234, 88, 12, 0.1);
+  --lfg-badge-warning-fg: #c2410c;
+  --lfg-badge-warning-dot: #ea580c;
+  --lfg-badge-warning-border: rgba(234, 88, 12, 0.4);
+  --lfg-badge-danger-bg: rgba(220, 38, 38, 0.1);
+  --lfg-badge-danger-fg: #b91c1c;
+  --lfg-badge-danger-dot: #dc2626;
+  --lfg-badge-danger-border: rgba(220, 38, 38, 0.4);
+  --lfg-badge-neutral-bg: rgba(107, 114, 128, 0.07);
+  --lfg-badge-neutral-fg: #4b5563;
+  --lfg-badge-neutral-dot: #6b7280;
+  --lfg-badge-neutral-border: rgba(107, 114, 128, 0.32);
+}
+
+/* ── Dark-mode root token overrides ──
+ * Public tokens re-themed for dark color schemes. Element-level dark rules
+ * (pinned/row-pinned cell backgrounds) live with their own sections. */
+@media (prefers-color-scheme: dark) {
+  .lfg-grid {
+    --lfg-drag-handle-color: rgba(255, 255, 255, 0.45);
+    --lfg-color-selected-row: color-mix(in srgb, var(--lfg-color-accent) 20%, var(--lfg-color-bg));
+    --lfg-color-selected-column: color-mix(in srgb, var(--lfg-color-accent) 20%, var(--lfg-color-bg));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 3. CORE LAYOUT
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Layout model:
+ *   - Viewport is the scrollport for X and Y.
+ *   - Sticky column header (.lfg-header) on vertical scroll.
+ *   - Horizontal virtualization: header/body use a pool of cells with
+ *     position:absolute; full grid width via --lfg-total-width for scroll range.
+ *   - Scroll container height = headerHeight + (rows × rowHeight) — JS.
+ */
+
+/* ── Viewport (the scrollable window) ── */
+/* overflow: auto on BOTH axes — this is what creates the scrollbars */
+/* ── Grid Surface ── */
+/* Neutral viewport-only composite-grid boundary. Occupies the flex slot the
+ * viewport used to hold directly, and lets the viewport fill it, so sizing,
+ * flex, and overflow geometry are unchanged. Auxiliary layers (pagination,
+ * overlay, floating popups) stay outside it as siblings under `.lfg-grid`. */
+.lfg-grid-surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.lfg-grid-surface:focus-visible:not([aria-activedescendant]),
+.lfg-grid-surface.lfg-keyboard-focus:focus:not([aria-activedescendant]) {
+  outline: 3px solid var(--lfg-cell-focus, var(--lfg-color-accent, #2563FF));
+  outline-offset: -3px;
+}
+
+.lfg-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+  background-color: var(--lfg-color-bg);
+}
+
+/* ── Scroll Container ── */
+/* height = headerHeight + (totalRows × rowHeight) — set by JS */
+/* min-width = total column width — enables horizontal scroll */
+.lfg-scroll-container {
+  position: relative;
+  min-width: var(--lfg-total-width);
+  min-height: 100%;
+  /* height set by JS */
+}
+
+
+/* ── Header ── */
+/* Sticky to viewport top: stays visible while vertically scrolling rows. */
+/* Same min-width as body rows → horizontal scroll keeps labels aligned with cells. */
+.lfg-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+  min-width: var(--lfg-total-width);
+  height: var(--lfg-header-height, 40px);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-header-row {
+  position: relative;
+  display: block;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+  min-width: var(--lfg-total-width);
+}
+
+/* ── Column group header rows (display-only, above leaf header) ── */
+.lfg-group-header-row {
+  position: relative;
+  display: block;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+  min-width: var(--lfg-total-width);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  pointer-events: none;
+  user-select: none;
+}
+
+.lfg-group-header-span {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--lfg-cell-padding-x);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  text-align: var(--lfg-cell-text-align, left);
+  pointer-events: none;
+  border-right: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+/* Ungrouped utility columns (selection / actions) — borders only, no label. */
+.lfg-group-header-span-gap {
+  padding: 0;
+}
+
+.lfg-pinned-header-stack > .lfg-group-header-row {
+  min-width: 100%;
+  width: 100%;
+}
+
+.lfg-header-cell {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+  border-right: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-header-label {
+  flex: 1;
+  min-width: 0;
+  padding: var(--lfg-cell-padding-y) var(--lfg-cell-padding-x);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  align-content: center;
+  text-align: var(--lfg-cell-text-align, left);
+}
+
+/* ── Data Rows ── */
+/* translateY on row; cells absolutely positioned on X within the row */
+.lfg-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  height: var(--lfg-row-height, 40px);
+  min-width: var(--lfg-total-width);
+  will-change: transform;
+  contain: layout style;
+  cursor: default;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+/* ── Data Cells ── */
+.lfg-cell {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: var(--lfg-cell-padding-y) var(--lfg-cell-padding-x);
+  overflow: hidden;
+  border-right: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  display: flex;
+  align-items: center;
+}
+
+/* Plain formatted values — mirrors `.lfg-header-label` ellipsis behavior. */
+.lfg-cell-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: var(--lfg-cell-text-align, left);
+}
+
+/* Shell content must shrink inside the flex cell so labels can ellipsis. */
+.lfg-cell > .lfg-cell-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Adjacent action columns form one compact utility strip. Keep its internal
+   cells borderless, then restore one boundary where data columns begin. */
+.lfg-action-cell {
+
+}
+
+.lfg-action-cell + .lfg-cell:not(.lfg-action-cell) {
+  border-left: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 4. HEADER AND COLUMN CONTROLS
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Sort affordance ── */
+.lfg-header-cell.lfg-header-sortable {
+  cursor: pointer;
+}
+
+/* ── Header label space reserved for controls ── */
+.lfg-header-cell.lfg-header-has-controls .lfg-header-label {
+  padding-right: calc(
+    1px + (var(--lfg-header-control-count, 0) * 22px)
+  );
+}
+
+/* ── Resize handle ── */
+.lfg-resize-handle {
+  flex-shrink: 0;
+  width: 6px;
+  cursor: col-resize;
+  align-self: stretch;
+  touch-action: none;
+  background: transparent;
+}
+
+.lfg-resize-handle:hover {
+  background: color-mix(in srgb, var(--lfg-border, var(--lfg-color-border)) 55%, transparent);
+}
+
+/* ── Header controls container ── */
+.lfg-header-controls {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lfg-header-controls-gap, 4px);
+  z-index: 2;
+}
+
+/* ── Column menu trigger + header action trigger + filter trigger ── */
+.lfg-column-menu-trigger,
+.lfg-column-filter-trigger,
+.lfg-header-action-trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: var(--lfg-header-trigger-size, 22px);
+  height: var(--lfg-header-trigger-size, 22px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--lfg-header-trigger-icon-size, 16px);
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+  border-radius: var(--lfg-radius-control, 3px);
+}
+
+.lfg-column-menu-trigger {
+  color: var(--lfg-column-menu-icon-color, #ffffff);
+}
+
+.lfg-column-filter-trigger {
+  color: var(--lfg-filter-trigger-icon-color, #ffffff);
+}
+
+.lfg-column-menu-trigger::before {
+  content: var(--lfg-column-menu-trigger-icon, "");
+  display: block;
+  width: var(--lfg-header-trigger-icon-size, 16px);
+  height: var(--lfg-header-trigger-icon-size, 16px);
+  flex-shrink: 0;
+  background-color: var(--lfg-column-menu-trigger-icon-paint, currentColor);
+  -webkit-mask: var(
+      --lfg-column-menu-trigger-mask,
+      url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E")
+    )
+    center / contain no-repeat;
+  mask: var(
+      --lfg-column-menu-trigger-mask,
+      url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E")
+    )
+    center / contain no-repeat;
+}
+
+/*
+ * Dedicated filter trigger default: Lucide `funnel` via CSS mask.
+ * Override with `columnMenu.headerIcons.filtered` / CSS
+ * `--lfg-filter-active-icon`, and set `--lfg-filter-trigger-mask: none` plus
+ * `--lfg-filter-trigger-icon-paint: transparent` when using a character icon.
+ * Color: `--lfg-filter-trigger-icon-color` (menu uses `--lfg-column-menu-icon-color`).
+ */
+.lfg-column-filter-trigger::before {
+  content: var(--lfg-filter-active-icon, "");
+  display: block;
+  width: var(--lfg-header-trigger-icon-size, 16px);
+  height: var(--lfg-header-trigger-icon-size, 16px);
+  flex-shrink: 0;
+  background-color: var(--lfg-filter-trigger-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-filter-trigger-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M10%2020a1%201%200%200%200%20.553.895l2%201A1%201%200%200%200%2014%2021v-7a2%202%200%200%201%20.517-1.341L21.74%204.67A1%201%200%200%200%2021%203H3a1%201%200%200%200-.742%201.67l7.225%207.989A2%202%200%200%201%2010%2014z%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-filter-trigger-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M10%2020a1%201%200%200%200%20.553.895l2%201A1%201%200%200%200%2014%2021v-7a2%202%200%200%201%20.517-1.341L21.74%204.67A1%201%200%200%200%2021%203H3a1%201%200%200%200-.742%201.67l7.225%207.989A2%202%200%200%201%2010%2014z%27%2F%3E%3C%2Fsvg%3E")
+  );
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+/* ── Header trigger state icons ──
+ * The menu trigger swaps its Lucide-style mask based on sort/filter state at
+ * rest, reverting to ⋮ on hover / while open. Character overrides via
+ * `columnMenu.headerIcons.*` set content + disable the mask (same pattern as
+ * the dedicated filter trigger). */
+
+/* Sort only — Lucide arrow-up / arrow-down */
+.lfg-header-sorted-asc:not(.lfg-header-filtered) .lfg-column-menu-trigger,
+.lfg-header-sorted-desc:not(.lfg-header-filtered) .lfg-column-menu-trigger {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+.lfg-header-sorted-asc:not(.lfg-header-filtered) .lfg-column-menu-trigger::before {
+  content: var(--lfg-sort-asc-icon, "");
+  background-color: var(--lfg-sort-asc-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-sort-asc-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m5%2012%207-7%207%207%27%2F%3E%3Cpath%20d%3D%27M12%2019V5%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-sort-asc-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m5%2012%207-7%207%207%27%2F%3E%3Cpath%20d%3D%27M12%2019V5%27%2F%3E%3C%2Fsvg%3E")
+  );
+}
+.lfg-header-sorted-desc:not(.lfg-header-filtered) .lfg-column-menu-trigger::before {
+  content: var(--lfg-sort-desc-icon, "");
+  background-color: var(--lfg-sort-desc-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-sort-desc-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%205v14%27%2F%3E%3Cpath%20d%3D%27m19%2012-7%207-7-7%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-sort-desc-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%205v14%27%2F%3E%3Cpath%20d%3D%27m19%2012-7%207-7-7%27%2F%3E%3C%2Fsvg%3E")
+  );
+}
+
+/* Filter only — same funnel mask language as the dedicated filter trigger */
+.lfg-header-filtered:not(.lfg-header-sorted-asc):not(.lfg-header-sorted-desc) .lfg-column-menu-trigger {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+.lfg-header-filtered:not(.lfg-header-sorted-asc):not(.lfg-header-sorted-desc) .lfg-column-menu-trigger::before {
+  content: var(--lfg-filter-active-icon, "");
+  background-color: var(--lfg-filter-trigger-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-filter-trigger-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M10%2020a1%201%200%200%200%20.553.895l2%201A1%201%200%200%200%2014%2021v-7a2%202%200%200%201%20.517-1.341L21.74%204.67A1%201%200%200%200%2021%203H3a1%201%200%200%200-.742%201.67l7.225%207.989A2%202%200%200%201%2010%2014z%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-filter-trigger-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M10%2020a1%201%200%200%200%20.553.895l2%201A1%201%200%200%200%2014%2021v-7a2%202%200%200%201%20.517-1.341L21.74%204.67A1%201%200%200%200%2021%203H3a1%201%200%200%200-.742%201.67l7.225%207.989A2%202%200%200%201%2010%2014z%27%2F%3E%3C%2Fsvg%3E")
+  );
+}
+
+/* Combined: sort + filter — Lucide arrow with compact funnel */
+.lfg-header-sorted-asc.lfg-header-filtered .lfg-column-menu-trigger,
+.lfg-header-sorted-desc.lfg-header-filtered .lfg-column-menu-trigger {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+.lfg-header-sorted-asc.lfg-header-filtered .lfg-column-menu-trigger::before {
+  content: var(--lfg-sort-asc-filtered-icon, "");
+  background-color: var(--lfg-sort-asc-filtered-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-sort-asc-filtered-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m4%2011%205-5%205%205%27%2F%3E%3Cpath%20d%3D%27M9%2017V6%27%2F%3E%3Cpath%20d%3D%27M14.5%208h7L18.5%2012v3.5L16%2014.5V12L14.5%208z%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-sort-asc-filtered-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27m4%2011%205-5%205%205%27%2F%3E%3Cpath%20d%3D%27M9%2017V6%27%2F%3E%3Cpath%20d%3D%27M14.5%208h7L18.5%2012v3.5L16%2014.5V12L14.5%208z%27%2F%3E%3C%2Fsvg%3E")
+  );
+}
+.lfg-header-sorted-desc.lfg-header-filtered .lfg-column-menu-trigger::before {
+  content: var(--lfg-sort-desc-filtered-icon, "");
+  background-color: var(--lfg-sort-desc-filtered-icon-paint, currentColor);
+  -webkit-mask-image: var(
+    --lfg-sort-desc-filtered-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M9%207v11%27%2F%3E%3Cpath%20d%3D%27m4%2013%205%205%205-5%27%2F%3E%3Cpath%20d%3D%27M14.5%208h7L18.5%2012v3.5L16%2014.5V12L14.5%208z%27%2F%3E%3C%2Fsvg%3E")
+  );
+  mask-image: var(
+    --lfg-sort-desc-filtered-mask,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M9%207v11%27%2F%3E%3Cpath%20d%3D%27m4%2013%205%205%205-5%27%2F%3E%3Cpath%20d%3D%27M14.5%208h7L18.5%2012v3.5L16%2014.5V12L14.5%208z%27%2F%3E%3C%2Fsvg%3E")
+  );
+}
+
+/* Dedicated filter trigger: visible while filtered or while its menu is open */
+.lfg-header-filter-active .lfg-column-filter-trigger,
+.lfg-column-filter-trigger.lfg-popup-trigger-open,
+.lfg-column-filter-trigger[aria-expanded="true"] {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+
+/* Column menu trigger: stay visible (as ⋮) while its dropdown is open,
+ * including when the pointer moves from the header onto the floating panel. */
+.lfg-column-menu-trigger.lfg-popup-trigger-open,
+.lfg-column-menu-trigger[aria-expanded="true"] {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+.lfg-column-menu-trigger.lfg-popup-trigger-open::before,
+.lfg-column-menu-trigger[aria-expanded="true"]::before {
+  content: "";
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E");
+}
+
+/* All states revert to Lucide ellipsis-vertical on hover */
+.lfg-header-sorted-asc .lfg-column-menu-trigger:hover::before,
+.lfg-header-sorted-desc .lfg-column-menu-trigger:hover::before,
+.lfg-header-filtered .lfg-column-menu-trigger:hover::before {
+  content: "";
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27%23000%27%20stroke-width%3D%272%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2712%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%275%27%20r%3D%271%27%2F%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%2719%27%20r%3D%271%27%2F%3E%3C%2Fsvg%3E");
+}
+
+.lfg-header-cell:hover .lfg-column-menu-trigger,
+.lfg-column-menu-trigger:focus-visible,
+.lfg-header-cell:hover .lfg-column-filter-trigger,
+.lfg-column-filter-trigger:focus-visible,
+.lfg-header-cell:hover .lfg-header-action-trigger,
+.lfg-header-action-trigger:focus-visible {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+.lfg-column-menu-trigger:hover,
+.lfg-column-filter-trigger:hover,
+.lfg-header-action-trigger:hover {
+  opacity: 1;
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--lfg-cell-focus, var(--lfg-color-accent)) 12%, transparent);
+}
+
+.lfg-header-action-trigger:disabled,
+.lfg-header-action-trigger[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* ── Column reorder drag handle ── */
+/*
+ * Absolutely positioned inside .lfg-header-cell so it never causes a
+ * layout shift (it's outside the flex flow). Invisible by default;
+ * appears on header hover or active drag only while column order is
+ * enabled (`.lfg-column-order-enabled` on the grid root). Icon: 2×3
+ * dot grip drawn with a repeating radial-gradient — no external dependency.
+ */
+.lfg-column-drag-handle {
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 14px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+  z-index: 3;
+  touch-action: none;
+  border-radius: 5px;
+  color: var(--lfg-drag-handle-color, var(--lfg-color-muted));
+  background: transparent;
+  pointer-events: none;
+}
+
+.lfg-column-order-enabled .lfg-column-drag-handle {
+  display: flex;
+  pointer-events: auto;
+}
+
+/* 2 × 3 grip-dot icon via radial-gradient background */
+.lfg-column-drag-handle::before {
+  content: "";
+  display: block;
+  width: 16px;
+  height: 8px;
+  background-image: radial-gradient(
+    circle,
+    currentColor 1.1px,
+    transparent 1.1px
+  );
+  background-size: 5px 4px;
+  background-repeat: repeat;
+}
+
+/* Reveal on header hover or when the handle itself gets focus */
+.lfg-column-order-enabled .lfg-header-cell:hover .lfg-column-drag-handle,
+.lfg-column-order-enabled .lfg-column-drag-handle:focus-visible {
+  opacity: 0.75;
+}
+
+.lfg-column-order-enabled .lfg-column-drag-handle:hover {
+  opacity: 1;
+  color: var(--lfg-cell-focus, var(--lfg-color-accent));
+  background: color-mix(
+    in srgb,
+    var(--lfg-cell-focus, var(--lfg-color-accent)) 16%,
+    transparent
+  );
+}
+
+/* Keep visible and switch to grabbing cursor during an active drag */
+.lfg-column-order-enabled.lfg-column-order-dragging .lfg-column-drag-handle {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+.lfg-column-order-enabled .lfg-header-cell.lfg-column-drag-source .lfg-column-drag-handle {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+/* ── Column drag source / shift states ── */
+.lfg-grid.lfg-column-order-dragging {
+  cursor: grabbing;
+}
+
+/* Column reorder: preview transitions on both header and body cells. */
+.lfg-column-order-dragging .lfg-header-cell,
+.lfg-column-order-dragging .lfg-cell {
+  transition: opacity 120ms ease, background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.lfg-header-cell.lfg-column-drag-source {
+  opacity: 0.55;
+  z-index: 3;
+}
+
+.lfg-header-cell.lfg-column-shift-left,
+.lfg-header-cell.lfg-column-shift-right {
+  background-color: color-mix(
+    in srgb,
+    var(--lfg-column-drop-line, var(--lfg-cell-focus, var(--lfg-color-accent))) 4%,
+    transparent
+  );
+}
+
+/* ── Column drop indicator ──
+ *
+ * Rail is a flex column: top ring → beam → bottom ring.
+ * The beam lives BETWEEN the caps in normal flow, so it cannot bisect them.
+ */
+.lfg-column-drop-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 8;
+  display: none;
+}
+
+.lfg-column-drop-indicator[data-active="true"] {
+  animation: lfg-column-drop-in 120ms ease-out;
+}
+
+.lfg-column-drop-indicator-rail {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 12px;
+  margin-left: -6px;
+  transform: none;
+}
+
+.lfg-column-drop-indicator-beam {
+  position: relative;
+  flex: 1 1 auto;
+  align-self: center;
+  width: 2px;
+  min-height: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--lfg-column-drop-line, var(--lfg-color-accent, #2563FF));
+  box-shadow:
+    0 0 6px
+      color-mix(
+        in srgb,
+        var(--lfg-column-drop-line, var(--lfg-color-accent, #2563FF)) 50%,
+        transparent
+      );
+}
+
+.lfg-column-drop-indicator-cap {
+  position: relative;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(
+    --lfg-color-header-bg,
+    var(--lfg-color-bg, #ffffff)
+  );
+  border: 2px solid
+    var(--lfg-column-drop-line, var(--lfg-color-accent, #2563FF));
+  box-shadow:
+    0 0 8px
+      color-mix(
+        in srgb,
+        var(--lfg-column-drop-line, var(--lfg-color-accent, #2563FF)) 35%,
+        transparent
+      );
+}
+
+/*
+ * Badge: shared popup chrome so light/dark themes stay aligned with menus.
+ * Top edge from --lfg-column-drop-badge-y / inline top (JS).
+ */
+.lfg-column-drop-indicator-badge {
+  position: absolute;
+  top: var(--lfg-column-drop-badge-y, 80px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 160px;
+  padding: 6px 10px 6px 8px;
+  border-radius: var(--lfg-popup-radius, var(--lfg-radius-menu, 8px));
+  border: var(--lfg-border-width, 1px) solid
+    var(
+      --lfg-popup-border,
+      color-mix(
+        in srgb,
+        var(--lfg-column-drop-line, var(--lfg-color-accent)) 45%,
+        var(--lfg-color-border, transparent)
+      )
+    );
+  background: var(
+    --lfg-popup-bg,
+    var(--lfg-color-surface, var(--lfg-color-bg, #ffffff))
+  );
+  color: var(--lfg-popup-fg, var(--lfg-color-text, #0f172a));
+  box-shadow: var(
+    --lfg-popup-shadow,
+    0 12px 32px rgba(15, 23, 42, 0.14)
+  );
+  white-space: nowrap;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.lfg-column-drop-indicator-badge-icon {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 12px;
+  position: relative;
+  opacity: 0.95;
+}
+
+.lfg-column-drop-indicator-badge-icon::before,
+.lfg-column-drop-indicator-badge-icon::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lfg-column-drop-line, var(--lfg-color-accent, #2563FF));
+}
+
+.lfg-column-drop-indicator-badge-icon::before {
+  left: 2px;
+}
+
+.lfg-column-drop-indicator-badge-icon::after {
+  right: 2px;
+}
+
+.lfg-column-drop-indicator-badge-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.lfg-column-drop-indicator-badge-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  color: var(--lfg-popup-fg, var(--lfg-color-text, #0f172a));
+}
+
+.lfg-column-drop-indicator-badge-detail {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--lfg-color-muted, #64748b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lfg-column-drop-indicator-badge-detail[hidden] {
+  display: none;
+}
+
+@keyframes lfg-column-drop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lfg-column-drop-indicator[data-active="true"] {
+    animation: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 4b. FLOATING FILTER ROW
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.lfg-floating-filter-row {
+  position: relative;
+  display: block;
+  height: var(--lfg-floating-filter-height, var(--lfg-row-height, 40px));
+  min-width: var(--lfg-total-width);
+  box-sizing: border-box;
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg));
+  border-top: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-floating-filter-cell {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  overflow: hidden;
+  border-right: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-pinned-right-header-stack .lfg-floating-filter-cell {
+  border-right: 0;
+  border-left: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+/* Utility columns (selection / actions / custom components): no filter
+   control, but keep the same column grid lines as data columns. */
+.lfg-header-cell[data-lfg-utility-column] {
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-floating-filters-active .lfg-header-row,
+.lfg-floating-filters-active .lfg-pinned-header-row,
+.lfg-floating-filters-active .lfg-pinned-right-header-row,
+.lfg-floating-filters-active .lfg-header-cell[data-lfg-utility-column] {
+  border-bottom: 0;
+}
+
+.lfg-floating-filter-cell[data-lfg-utility-column] {
+  border-top: 0;
+  border-right: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-floating-filter-cell[data-col-id="__lfg_selection__"] {
+  border-left: 0;
+}
+
+
+.lfg-floating-filter-range {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  height: calc(100% - 4px);
+  box-sizing: border-box;
+  padding: 0 6px 0 4px;
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-radius: var(--lfg-radius-control, 3px);
+  background: var(--lfg-header-bg, var(--lfg-color-surface));
+}
+
+.lfg-floating-filter-range > .lfg-floating-filter-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 2px 4px;
+  box-shadow: none;
+}
+
+.lfg-floating-filter-range > .lfg-floating-filter-input:focus {
+  outline: none;
+}
+
+.lfg-floating-filter-range:focus-within {
+  outline: 1.5px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: -1px;
+}
+
+.lfg-floating-filter-range-sep {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  color: var(--lfg-color-muted, rgba(148, 163, 184, 0.75));
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.lfg-floating-filter-range-sep::before {
+  content: "→";
+}
+
+/* Compact date floating filter — calendar button opens the dedicated panel. */
+.lfg-floating-filter-cell .lfg-floating-filter-date-button {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: calc(100% - 4px);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-radius: var(--lfg-radius-control, 3px);
+  background: var(--lfg-header-bg, var(--lfg-color-surface));
+  color: var(--lfg-fg, var(--lfg-color-text));
+  opacity: 1;
+  cursor: pointer;
+}
+
+.lfg-floating-filter-cell .lfg-floating-filter-date-button::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  background-color: var(--lfg-color-muted, rgba(148, 163, 184, 0.85));
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.lfg-floating-filter-cell .lfg-floating-filter-date-button:hover,
+.lfg-floating-filter-cell .lfg-floating-filter-date-button:focus-visible {
+  opacity: 1;
+  outline: 1.5px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: -1px;
+}
+
+.lfg-floating-filter-cell
+  .lfg-floating-filter-date-button.lfg-floating-filter-date-button-active::before {
+  background-color: var(--lfg-color-accent, #3B82F6);
+}
+
+.lfg-floating-filter-cell .lfg-floating-filter-date-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lfg-floating-filter-input {
+  flex: 1;
+  min-width: 0;
+  height: calc(100% - 4px);
+  box-sizing: border-box;
+  padding: 2px 6px;
+  font-size: var(--lfg-floating-filter-font-size, 12px);
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  border-radius: var(--lfg-radius-control, 3px);
+  background: var(--lfg-header-bg, var(--lfg-color-surface));
+  color: var(--lfg-fg, var(--lfg-color-text));
+}
+
+/* Hide native number spinners — they crowd narrow floating-filter cells. */
+.lfg-floating-filter-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.lfg-floating-filter-input[type="number"]::-webkit-outer-spin-button,
+.lfg-floating-filter-input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+select.lfg-floating-filter-input {
+  cursor: pointer;
+}
+
+.lfg-floating-filter-input:focus {
+  outline: 1.5px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: -1px;
+}
+
+.lfg-floating-filter-input:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.lfg-floating-filter-cell .lfg-column-filter-trigger {
+  flex-shrink: 0;
+  width: var(--lfg-header-trigger-size, 22px);
+  height: var(--lfg-header-trigger-size, 22px);
+  opacity: 0.6;
+  pointer-events: auto;
+}
+
+.lfg-floating-filter-cell:hover .lfg-column-filter-trigger {
+  opacity: 0.85;
+}
+
+/* Pinned floating filter rows — siblings of the leaf row inside the stack */
+.lfg-pinned-header-stack > .lfg-floating-filter-row {
+  position: relative;
+  width: 100%;
+  min-width: 100%;
+}
+
+.lfg-pinned-left-header-stack > .lfg-floating-filter-row {
+  width: var(--lfg-left-pinned-width, 0px);
+  min-width: var(--lfg-left-pinned-width, 0px);
+}
+
+.lfg-pinned-right-header-stack > .lfg-floating-filter-row {
+  width: var(--lfg-right-pinned-width, 0px);
+  min-width: var(--lfg-right-pinned-width, 0px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 5. SELECTION AND FOCUS STATES
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Center-body selection/column-tint here; pinned-lane equivalents live in
+ * the Column pinning and Row pinning sections next to their lane rules. */
+
+/* ── Row selected ──
+ * `.lfg-row.lfg-row-selected .lfg-cell` at 0,3,0 beats user cell
+ * classes like `.my-class.lfg-cell` (0,2,0) so selection always
+ * takes visual priority without resorting to !important. */
+.lfg-row.lfg-row-selected .lfg-cell {
+  background: var(--lfg-row-selected-bg, var(--lfg-color-selected-row));
+}
+
+/* ── Column selected (header + body cells); subtle tint so it layers
+ * with row selection. The `.lfg-row` ancestor gives 0,3,0 specificity,
+ * beating user cell classes at 0,2,0 without resorting to !important. ── */
+.lfg-row .lfg-cell.lfg-column-selected {
+  background: var(
+    --lfg-column-selected-bg,
+    var(--lfg-color-selected-column, color-mix(in srgb, var(--lfg-color-accent) 16%, var(--lfg-color-bg)))
+  );
+}
+.lfg-header-cell.lfg-column-selected {
+  background: var(
+    --lfg-column-selected-header-bg,
+    var(--lfg-color-selected-column, var(--lfg-row-selected-bg, var(--lfg-color-selected-row)))
+  );
+}
+
+.lfg-floating-filter-cell.lfg-column-selected {
+  background: var(
+    --lfg-column-selected-bg,
+    var(--lfg-color-selected-column, color-mix(in srgb, var(--lfg-color-accent) 16%, var(--lfg-color-bg)))
+  );
+}
+
+.lfg-floating-filter-cell.lfg-column-selected .lfg-floating-filter-input {
+  background: var(
+    --lfg-column-selected-bg,
+    var(--lfg-color-selected-column, color-mix(in srgb, var(--lfg-color-accent) 16%, var(--lfg-color-bg)))
+  );
+}
+
+/* ── Selection column cells (real column, not overlay). ── */
+.lfg-cell[data-col-id="__lfg_selection__"],
+.lfg-header-cell[data-col-id="__lfg_selection__"] {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+}
+
+/* ── Native checkbox chrome (selection, boolean shells, editors, filters) ── */
+.lfg-row-selection-checkbox,
+.lfg-header-selection-checkbox,
+.lfg-cell-shell-checkbox-input,
+.lfg-editor-checkbox,
+.lfg-filter-selection-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: var(--lfg-checkbox-size);
+  height: var(--lfg-checkbox-size);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--lfg-checkbox-border);
+  border-radius: var(--lfg-checkbox-radius);
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 10px 10px;
+  cursor: pointer;
+}
+
+.lfg-row-selection-checkbox:checked,
+.lfg-header-selection-checkbox:checked,
+.lfg-cell-shell-checkbox-input:checked,
+.lfg-editor-checkbox:checked,
+.lfg-filter-selection-item input[type="checkbox"]:checked {
+  border-color: var(--lfg-checkbox-bg-checked);
+  background-color: var(--lfg-checkbox-bg-checked);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.75 6.25 5.25 8.75 9.25 4.25' stroke='%23ffffff' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.lfg-row-selection-checkbox:indeterminate,
+.lfg-header-selection-checkbox:indeterminate,
+.lfg-cell-shell-checkbox-input:indeterminate,
+.lfg-editor-checkbox:indeterminate,
+.lfg-filter-selection-item input[type="checkbox"]:indeterminate {
+  border-color: var(--lfg-checkbox-bg-checked);
+  background-color: var(--lfg-checkbox-bg-checked);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 6h6' stroke='%23ffffff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.lfg-row-selection-checkbox:disabled,
+.lfg-header-selection-checkbox:disabled,
+.lfg-cell-shell-checkbox-input:disabled,
+.lfg-editor-checkbox:disabled,
+.lfg-filter-selection-item input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lfg-row-selection-checkbox:focus-visible,
+.lfg-header-selection-checkbox:focus-visible,
+.lfg-cell-shell-checkbox-input:focus-visible,
+.lfg-editor-checkbox:focus-visible,
+.lfg-filter-selection-item input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: 2px;
+}
+
+.lfg-editor-checkbox {
+  /*
+   * The editor host is `inset: 0`, so it ignores the cell's own padding. Match
+   * the cell content inset so the checkbox lines up with the value it replaces.
+   */
+  margin-block: auto;
+  margin-inline-start: var(--lfg-cell-padding-x);
+}
+
+/* ── Focused cell ── */
+/* Inset ring: no layout shift, independent from row/column selection. */
+.lfg-cell.lfg-cell-focused {
+  box-shadow: inset 0 0 0 2px var(--lfg-cell-focus, var(--lfg-color-accent, #2563FF));
+}
+
+/*
+ * Edit and Widget modes move real DOM focus inside the grid while retaining
+ * the body target used for restoration. Let the focused control own the
+ * indicator until focus returns to the composite surface.
+ */
+.lfg-grid:focus-within
+  .lfg-grid-surface:not(:focus)
+  .lfg-cell.lfg-cell-focused {
+  box-shadow: none;
+}
+
+/*
+ * FocusController retains the last public body-cell focus while composite
+ * navigation visits headers or filters. Keep that state, but hide its legacy
+ * ring whenever another element is the semantic active descendant.
+ * `.lfg-keyboard-focus` covers pointer-then-arrow paths where Chromium keeps
+ * the surface focused without re-enabling `:focus-visible`.
+ */
+.lfg-grid-surface:focus-visible[aria-activedescendant]
+  .lfg-cell.lfg-cell-focused:not(.lfg-a11y-active-target),
+.lfg-grid-surface.lfg-keyboard-focus:focus[aria-activedescendant]
+  .lfg-cell.lfg-cell-focused:not(.lfg-a11y-active-target) {
+  box-shadow: none;
+}
+
+.lfg-grid-surface:focus-visible .lfg-a11y-active-target,
+.lfg-grid-surface.lfg-keyboard-focus:focus .lfg-a11y-active-target {
+  box-shadow: inset 0 0 0 2px var(--lfg-cell-focus, var(--lfg-color-accent, #2563FF));
+}
+
+@media (forced-colors: active) {
+  .lfg-grid-surface:focus-visible:not([aria-activedescendant]),
+  .lfg-grid-surface.lfg-keyboard-focus:focus:not([aria-activedescendant]) {
+    outline-color: Highlight;
+  }
+
+  .lfg-grid-surface:focus-visible .lfg-a11y-active-target,
+  .lfg-grid-surface.lfg-keyboard-focus:focus .lfg-a11y-active-target,
+  .lfg-cell.lfg-cell-focused {
+    box-shadow: inset 0 0 0 2px Highlight;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 6. COLUMN PINNING
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Pinned-left lane ── */
+/* The outer body overlay stays in vertical scroll-content coordinates.
+   Horizontal stickiness belongs to the full-height inner body so Firefox
+   cannot pin a zero-height row-positioning containing block vertically. */
+.lfg-pinned-left-layer {
+  position: absolute;
+  top: var(--lfg-header-height, 40px);
+  left: 0;
+  width: 100%;
+  min-width: var(--lfg-total-width);
+  height: calc(100% - var(--lfg-header-height, 40px));
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Pinned header stack — sticky structural parent for leaf + addon rows.
+   Sticky/top/width live on the stack; the leaf row is a non-sticky child. */
+.lfg-pinned-header-stack {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  pointer-events: auto;
+  margin-bottom: calc(-1 * var(--lfg-header-height, 40px));
+}
+
+.lfg-pinned-left-header-stack {
+  left: 0;
+  width: var(--lfg-left-pinned-width, 0px);
+  min-width: var(--lfg-left-pinned-width, 0px);
+}
+
+.lfg-pinned-right-header-stack {
+  right: 0;
+  float: right;
+  width: var(--lfg-right-pinned-width, 0px);
+  min-width: var(--lfg-right-pinned-width, 0px);
+}
+
+/* Pinned header leaf row — child of the stack (no longer sticky itself). */
+.lfg-pinned-header-row {
+  position: relative;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  pointer-events: auto;
+}
+
+.lfg-pinned-header-row .lfg-header-cell {
+  pointer-events: auto;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+}
+
+.lfg-pinned-body {
+  position: sticky;
+  left: 0;
+  width: var(--lfg-left-pinned-width, 0px);
+  min-width: var(--lfg-left-pinned-width, 0px);
+  height: 100%;
+}
+
+.lfg-pinned-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  height: var(--lfg-row-height, 40px);
+  min-width: var(--lfg-left-pinned-width, 0px);
+  will-change: transform;
+  contain: layout style;
+  pointer-events: auto;
+  cursor: default;
+  /* Opaque backing for translucent selected/column-selected cell states. */
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+.lfg-pinned-row .lfg-cell {
+  pointer-events: auto;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+.lfg-pinned-row.lfg-row-selected .lfg-cell {
+  background: var(--lfg-row-selected-bg, var(--lfg-color-selected-row));
+}
+
+.lfg-pinned-row .lfg-cell.lfg-column-selected {
+  background: var(
+    --lfg-column-selected-bg,
+    var(--lfg-color-selected-column, color-mix(in srgb, var(--lfg-color-accent) 14%, var(--lfg-color-bg)))
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  .lfg-pinned-row,
+  .lfg-pinned-row .lfg-cell {
+    background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  }
+}
+
+/* ── Pinned-right lane ── */
+.lfg-pinned-right-layer {
+  position: absolute;
+  top: var(--lfg-header-height, 40px);
+  left: 0;
+  width: 100%;
+  min-width: var(--lfg-total-width);
+  height: calc(100% - var(--lfg-header-height, 40px));
+  z-index: 5;
+  pointer-events: none;
+}
+
+.lfg-pinned-right-header-row {
+  position: relative;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
+  background: var(--lfg-header-bg, var(--lfg-color-header-bg));
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  pointer-events: auto;
+}
+
+.lfg-pinned-right-header-row .lfg-header-cell {
+  pointer-events: auto;
+  height: var(--lfg-base-header-height, var(--lfg-header-height, 40px));
+  border-right: 0;
+  border-left: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-pinned-right-header-row .lfg-header-label {
+  padding-left: var(--lfg-cell-padding-x);
+}
+
+.lfg-pinned-right-header-row .lfg-resize-handle {
+  position: absolute;
+  left: 0;
+  right: auto;
+  top: 0;
+  height: 100%;
+}
+
+.lfg-pinned-right-body {
+  position: sticky;
+  right: 0;
+  width: var(--lfg-right-pinned-width, 0px);
+  min-width: var(--lfg-right-pinned-width, 0px);
+  height: 100%;
+  margin-left: auto;
+}
+
+.lfg-pinned-right-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  height: var(--lfg-row-height, 40px);
+  min-width: var(--lfg-right-pinned-width, 0px);
+  will-change: transform;
+  contain: layout style;
+  pointer-events: auto;
+  cursor: default;
+  /* Opaque backing for translucent selected/column-selected cell states. */
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+.lfg-pinned-right-row .lfg-cell {
+  pointer-events: auto;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  border-right: 0;
+  border-left: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-pinned-right-row.lfg-row-selected .lfg-cell {
+  background: var(--lfg-row-selected-bg, var(--lfg-color-selected-row));
+}
+
+.lfg-pinned-right-row .lfg-cell.lfg-column-selected {
+  background: var(
+    --lfg-column-selected-bg,
+    var(--lfg-color-selected-column, color-mix(in srgb, var(--lfg-color-accent) 14%, var(--lfg-color-bg)))
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  .lfg-pinned-right-row,
+  .lfg-pinned-right-row .lfg-cell {
+    background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 7. ROW DRAG AND ROW ORDERING
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Row drag handle ── */
+/*
+ * The handle lives inside the internal left-pinned row-drag or combined
+ * row-controls cell. That cell owns layout space; the handle is not an overlay.
+ *
+ * Combined cells keep a 64px lane and center a compact 56px (28px + 28px)
+ * control group. Drag-only cells stay 36px with the handle filling the cell.
+ */
+.lfg-row-drag-cell {
+  padding: 0;
+  overflow: hidden;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.lfg-row-controls-cell,
+.lfg-row-controls-header-cell {
+  display: grid;
+  grid-template-columns: 28px 28px;
+  justify-content: center;
+  align-items: stretch;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.lfg-row-controls-drag-slot,
+.lfg-row-controls-selection-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.lfg-row-drag-header {
+  padding: 0;
+  pointer-events: none;
+}
+
+.lfg-row-controls-header-cell .lfg-row-controls-drag-slot {
+  pointer-events: none;
+}
+
+.lfg-row-drag-handle {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  cursor: grab;
+  opacity: 0.42;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+  touch-action: none;
+  border-radius: 5px;
+  color: var(--lfg-drag-handle-color, var(--lfg-color-muted));
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lfg-row-drag-cell .lfg-row-drag-handle,
+.lfg-row-controls-drag-slot .lfg-row-drag-handle {
+  width: 100%;
+}
+
+.lfg-row-drag-handle::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 14px;
+  background-image: radial-gradient(
+    circle,
+    currentColor 1.15px,
+    transparent 1.15px
+  );
+  background-size: 4px 4.5px;
+  background-repeat: repeat;
+}
+
+/* ── Row drag enabled / blocked states ── */
+.lfg-row-drag-enabled .lfg-row-drag-handle {
+  pointer-events: auto;
+}
+
+.lfg-row-drag-enabled .lfg-row:hover .lfg-row-drag-handle,
+.lfg-row-drag-enabled .lfg-pinned-row:hover .lfg-row-drag-handle {
+  opacity: 0.78;
+}
+
+.lfg-row-drag-enabled .lfg-row-drag-handle:hover {
+  opacity: 1;
+  color: var(--lfg-cell-focus, var(--lfg-color-accent));
+  background: color-mix(
+    in srgb,
+    var(--lfg-cell-focus, var(--lfg-color-accent)) 16%,
+    transparent
+  );
+}
+
+/* Blocked: handles visible but disabled (sort/filter active) */
+.lfg-row-drag-blocked .lfg-row-drag-handle {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.25;
+}
+
+.lfg-row-drag-blocked .lfg-row:hover .lfg-row-drag-handle,
+.lfg-row-drag-blocked .lfg-pinned-row:hover .lfg-row-drag-handle {
+  opacity: 0.25;
+  color: inherit;
+  background: transparent;
+}
+
+/* Keep visible with grabbing cursor during active drag; suppress text selection */
+.lfg-row-dragging {
+  cursor: grabbing;
+}
+
+.lfg-row-dragging,
+.lfg-row-dragging .lfg-row,
+.lfg-row-dragging .lfg-pinned-row,
+.lfg-row-dragging .lfg-cell {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lfg-row-dragging .lfg-row-drag-handle {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+/* ── Row drag source (the row being dragged) ── */
+.lfg-row.lfg-row-drag-source,
+.lfg-pinned-row.lfg-row-drag-source {
+  opacity: 0.5;
+  z-index: 2;
+}
+
+/* ── Row drop indicator (surface-mounted rail + end caps) ──
+ * One continuous horizontal seam across left-pinned + center + right-pinned.
+ * Row drop-before/after classes remain as semantic markers; paint lives here. */
+.lfg-row-drop-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 9;
+  display: none;
+}
+
+.lfg-row-drop-indicator[data-active="true"] {
+  animation: lfg-row-drop-in 120ms ease-out;
+}
+
+.lfg-row-drop-indicator-rail {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 12px;
+  margin-top: -6px;
+}
+
+.lfg-row-drop-indicator-beam {
+  position: relative;
+  flex: 1 1 auto;
+  align-self: center;
+  height: 2px;
+  min-width: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--lfg-row-drop-line, var(--lfg-color-accent, #2563FF));
+  box-shadow:
+    0 0 6px
+      color-mix(
+        in srgb,
+        var(--lfg-row-drop-line, var(--lfg-color-accent, #2563FF)) 50%,
+        transparent
+      );
+}
+
+.lfg-row-drop-indicator-cap {
+  position: relative;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(
+    --lfg-color-bg,
+    var(--lfg-color-surface, #ffffff)
+  );
+  border: 2px solid
+    var(--lfg-row-drop-line, var(--lfg-color-accent, #2563FF));
+  box-shadow:
+    0 0 8px
+      color-mix(
+        in srgb,
+        var(--lfg-row-drop-line, var(--lfg-color-accent, #2563FF)) 35%,
+        transparent
+      );
+}
+
+@keyframes lfg-row-drop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lfg-row-drop-indicator[data-active="true"] {
+    animation: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 8. ROW PINNING
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Row-pinned top/bottom center lanes ── */
+.lfg-row-pinned-top-layer,
+.lfg-row-pinned-bottom-layer {
+  position: sticky;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  min-width: var(--lfg-total-width);
+}
+
+.lfg-row-pinned-top-layer {
+  top: var(--lfg-header-height, 40px);
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  margin-bottom: calc(-1 * var(--lfg-row-pinned-top-height, 0px));
+}
+
+.lfg-row-pinned-bottom-layer {
+  /*
+   * Sticky `top: calc(viewport - bottom-height)` instead of `bottom: 0`.
+   *
+   * Center body rows are absolutely positioned inside `.lfg-scroll-container`
+   * and do not extend its natural flow. With `bottom: 0` the lane's natural
+   * flow position would already be near the top of the scroll container
+   * (above the viewport bottom), so sticky never activates and the lane
+   * appears near the header. Pinning to `top` keyed off the viewport height
+   * makes the lane's visible top sit at `viewport - lane_height`, i.e. its
+   * bottom edge aligns with the viewport bottom on every scroll position.
+   *
+   * `--lfg-viewport-height` is written by DomGridRenderer on mount and on
+   * the viewport-resize rAF callback — never on scroll.
+   */
+  top: calc(var(--lfg-viewport-height, 0px) - var(--lfg-row-pinned-bottom-height, 0px));
+  border-top: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  margin-top: calc(-1 * var(--lfg-row-pinned-bottom-height, 0px));
+}
+
+.lfg-row-pinned-top-layer .lfg-row,
+.lfg-row-pinned-bottom-layer .lfg-row {
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  will-change: auto;
+  pointer-events: auto;
+}
+
+.lfg-row-pinned-top-layer .lfg-cell,
+.lfg-row-pinned-bottom-layer .lfg-cell {
+  pointer-events: auto;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+@media (prefers-color-scheme: dark) {
+  .lfg-row-pinned-top-layer,
+  .lfg-row-pinned-bottom-layer {
+    background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  }
+  .lfg-row-pinned-top-layer .lfg-cell,
+  .lfg-row-pinned-bottom-layer .lfg-cell {
+    background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  }
+}
+
+/* ── Row-pinned left/right sub-lanes ──
+   These zero-height sticky overlays must not participate in normal flow.
+   Pooled rows are absolutely positioned inside the zero-height box (the
+   sticky parent owns their positioning context) and remain visible via
+   `overflow: visible`. The center sub-lane still reserves flow space for the
+   pinned row(s); the overlays sit on top. */
+
+.lfg-row-pinned-top-left-layer,
+.lfg-row-pinned-top-right-layer,
+.lfg-row-pinned-bottom-left-layer,
+.lfg-row-pinned-bottom-right-layer {
+  position: sticky;
+  /* Zero flow height — see comment above. */
+  height: 0;
+  overflow: visible;
+  z-index: 7; /* above center row-pinned layer (z-index: 3) and column-pinned (5) */
+  pointer-events: none;
+}
+
+.lfg-row-pinned-top-left-layer,
+.lfg-row-pinned-top-right-layer {
+  top: var(--lfg-header-height, 40px);
+}
+
+.lfg-row-pinned-bottom-left-layer,
+.lfg-row-pinned-bottom-right-layer {
+  /* See `.lfg-row-pinned-bottom-layer` for why bottom lanes use sticky `top`
+     keyed off `--lfg-viewport-height` instead of `bottom: 0`. */
+  top: calc(var(--lfg-viewport-height, 0px) - var(--lfg-row-pinned-bottom-height, 0px));
+}
+
+.lfg-row-pinned-top-left-layer,
+.lfg-row-pinned-bottom-left-layer {
+  left: 0;
+  width: var(--lfg-left-pinned-width, 0px);
+  min-width: var(--lfg-left-pinned-width, 0px);
+  float: left;
+}
+
+.lfg-row-pinned-top-right-layer,
+.lfg-row-pinned-bottom-right-layer {
+  right: 0;
+  width: var(--lfg-right-pinned-width, 0px);
+  min-width: var(--lfg-right-pinned-width, 0px);
+  float: right;
+}
+
+/* Inner pooled rows are absolutely positioned by rowPinLaneDom (`top: i * ROW_HEIGHT;
+   left: 0`). They render into the painted area of the sticky parent thanks to
+   `overflow: visible` above. Bottom rows align with the viewport bottom because
+   the parent's sticky top is `viewport - bottom-height`.
+
+   ⚠ Width overrides: the base `.lfg-row` rule sets
+   `min-width: var(--lfg-total-width)` so center body rows can span every
+   column. Inside an overlay sub-lane that inheritance would paint a row the
+   full grid width on top of the center row-pinned lane and hide its cells.
+   Clamp the overlay row to the sub-lane's own width with `width / min-width /
+   max-width: 100%`. Cells inside still position via their own
+   `left` / `width` so the row fits the pinned-left or pinned-right column
+   slice. */
+.lfg-row-pinned-top-left-layer .lfg-row,
+.lfg-row-pinned-top-right-layer .lfg-row,
+.lfg-row-pinned-bottom-left-layer .lfg-row,
+.lfg-row-pinned-bottom-right-layer .lfg-row {
+  display: block;
+  height: var(--lfg-row-height, 40px);
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+  transform: none;
+  will-change: auto;
+  pointer-events: auto;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+/* ── Row-pinned separator rules ── */
+/* Top row gets the bottom separator; bottom row gets the top separator —
+   matches the center row-pinned lane treatment. */
+.lfg-row-pinned-top-left-layer .lfg-row:last-child,
+.lfg-row-pinned-top-right-layer .lfg-row:last-child {
+  border-bottom: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-row-pinned-bottom-left-layer .lfg-row:first-child,
+.lfg-row-pinned-bottom-right-layer .lfg-row:first-child {
+  border-top: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+.lfg-row-pinned-top-left-layer .lfg-cell,
+.lfg-row-pinned-top-right-layer .lfg-cell,
+.lfg-row-pinned-bottom-left-layer .lfg-cell,
+.lfg-row-pinned-bottom-right-layer .lfg-cell {
+  pointer-events: auto;
+  background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+}
+
+/* Match the existing pinned-right border treatment for right sub-lane cells. */
+.lfg-row-pinned-top-right-layer .lfg-cell,
+.lfg-row-pinned-bottom-right-layer .lfg-cell {
+  border-right: 0;
+  border-left: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+}
+
+/* ── Row-pinned dark-mode background rules ── */
+@media (prefers-color-scheme: dark) {
+  .lfg-row-pinned-top-left-layer .lfg-row,
+  .lfg-row-pinned-top-right-layer .lfg-row,
+  .lfg-row-pinned-bottom-left-layer .lfg-row,
+  .lfg-row-pinned-bottom-right-layer .lfg-row,
+  .lfg-row-pinned-top-left-layer .lfg-cell,
+  .lfg-row-pinned-top-right-layer .lfg-cell,
+  .lfg-row-pinned-bottom-left-layer .lfg-cell,
+  .lfg-row-pinned-bottom-right-layer .lfg-cell {
+    background: var(--lfg-row-bg, var(--lfg-bg, var(--lfg-color-bg)));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 9. FLOATING SURFACES AND MENUS
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * The column menu, row action menu, and cell menu panels share a common
+ * pattern (panel container, item button, hover/disabled states, icon,
+ * separator). They are kept as distinct class families to preserve their
+ * exact per-menu sizing/behavior. */
+
+/* ── Floating layer ── */
+.lfg-floating-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.lfg-floating {
+  position: absolute;
+  pointer-events: auto;
+  will-change: transform;
+}
+
+/* ── Column menu panel ──
+ *
+ * Token-driven chrome for the ⋯ dropdown. Built-in item icons are SVG masks
+ * keyed by `data-menu-action`; custom items keep glyph/text icons.
+ */
+.lfg-column-menu-panel {
+  box-sizing: border-box;
+  width: var(--lfg-column-menu-panel-width, 248px);
+  min-width: var(--lfg-column-menu-panel-width, 248px);
+  min-height: 0;
+  padding: var(--lfg-column-menu-panel-padding-y, 6px) 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(70vh, 420px);
+  background: var(--lfg-column-menu-panel-bg, var(--lfg-color-surface, #151C2E));
+  color: var(--lfg-column-menu-panel-fg, var(--lfg-color-text, #e8eef6));
+  border: 1px solid var(--lfg-column-menu-panel-border, var(--lfg-color-border, #2d3748));
+  border-radius: var(--lfg-column-menu-panel-radius, 8px);
+  box-shadow: var(
+    --lfg-column-menu-panel-shadow,
+    0 8px 24px rgba(0, 0, 0, 0.4)
+  );
+  font-family: var(--lfg-font-family);
+  font-size: var(--lfg-column-menu-item-font-size, 13px);
+  line-height: 1.3;
+  text-align: start;
+}
+
+.lfg-column-menu-item {
+  appearance: none;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--lfg-column-menu-item-gap, 10px);
+  width: calc(100% - 2 * var(--lfg-column-menu-item-inset-x, 6px));
+  margin: 1px var(--lfg-column-menu-item-inset-x, 6px);
+  padding: var(--lfg-column-menu-item-padding-y, 7px)
+    var(--lfg-column-menu-item-padding-x, 10px);
+  border: 0;
+  border-radius: var(--lfg-column-menu-item-radius, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  line-height: 1.3;
+}
+
+.lfg-column-menu-item:hover:not([disabled]),
+.lfg-column-menu-item:focus-visible:not([disabled]) {
+  background: var(
+    --lfg-column-menu-item-hover-bg,
+    color-mix(in srgb, var(--lfg-color-accent, #3B82F6) 18%, transparent)
+  );
+  outline: none;
+}
+
+.lfg-column-menu-item[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lfg-column-menu-icon {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--lfg-column-menu-item-icon-size, 16px);
+  height: var(--lfg-column-menu-item-icon-size, 16px);
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(
+    --lfg-column-menu-item-icon-fg,
+    var(--lfg-column-menu-panel-fg, var(--lfg-color-text, #e8eef6))
+  );
+}
+
+.lfg-column-menu-icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Pin left / right share Lucide `pin`; orientation is CSS-only. */
+.lfg-column-menu-item[data-menu-action="pin-left"] > .lfg-column-menu-icon-svg,
+.lfg-column-menu-item[data-menu-action="pin-left"] > .lfg-column-menu-icon > .lfg-column-menu-icon-svg {
+  transform: rotate(-40deg);
+}
+
+.lfg-column-menu-item[data-menu-action="pin-right"] > .lfg-column-menu-icon-svg,
+.lfg-column-menu-item[data-menu-action="pin-right"] > .lfg-column-menu-icon > .lfg-column-menu-icon-svg {
+  transform: scaleX(-1) rotate(-40deg);
+}
+
+.lfg-column-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lfg-column-menu-separator {
+  height: 1px;
+  margin: var(--lfg-column-menu-separator-margin-y, 5px)
+    var(--lfg-column-menu-separator-margin-x, 12px);
+  background: var(
+    --lfg-column-menu-separator,
+    var(--lfg-column-menu-panel-border, var(--lfg-color-border, #2d3748))
+  );
+  opacity: 1;
+}
+
+/* ── Row action trigger / cell ── */
+.lfg-action-cell {
+  padding: 0;
+  justify-content: center;
+  align-items: center;
+}
+
+.lfg-action-trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 4px;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.lfg-action-trigger:hover {
+  color: inherit;
+  background: color-mix(in srgb, var(--lfg-cell-focus, var(--lfg-color-accent)) 15%, transparent);
+}
+
+/* ── Row action menu panel ── */
+.lfg-action-menu-panel,
+.lfg-action-custom-panel {
+  min-width: 140px;
+  background: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+  border: var(--lfg-border-width) solid
+    var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+  border-radius: var(--lfg-popup-radius, var(--lfg-radius-menu, 8px));
+  box-shadow: var(--lfg-popup-shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--lfg-popup-fg, var(--lfg-fg, var(--lfg-color-text, currentColor)));
+}
+
+/*
+ * Shared popover arrow (caret) — host-owned `.lfg-floating-arrow` so every
+ * panel kind (column menu, filter, cell menu, row actions, header actions)
+ * gets the same tip, including panels with overflow scrolling.
+ */
+.lfg-floating[data-lfg-arrow] {
+  overflow: visible;
+}
+
+.lfg-floating[data-lfg-arrow] > .lfg-floating-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.lfg-floating[data-lfg-arrow] > .lfg-floating-arrow::before,
+.lfg-floating[data-lfg-arrow] > .lfg-floating-arrow::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Left placements → tip on the right edge, pointing toward the trigger */
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="left"] > .lfg-floating-arrow {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="left"] > .lfg-floating-arrow::before {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  border: 8px solid transparent;
+  border-left-color: var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="left"] > .lfg-floating-arrow::after {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-left-color: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+}
+
+/* Right placements */
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="right"] > .lfg-floating-arrow {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="right"] > .lfg-floating-arrow::before {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  border: 7px solid transparent;
+  border-right-color: var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="right"] > .lfg-floating-arrow::after {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+}
+
+/* Bottom placements */
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="bottom"] > .lfg-floating-arrow {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="bottom"] > .lfg-floating-arrow::before {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-bottom-color: var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="bottom"] > .lfg-floating-arrow::after {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+}
+
+/* Top placements */
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="top"] > .lfg-floating-arrow {
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="top"] > .lfg-floating-arrow::before {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement^="top"] > .lfg-floating-arrow::after {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+}
+
+/* Align caret toward start/end when not *-center */
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-start"][data-lfg-placement^="left"] > .lfg-floating-arrow,
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-start"][data-lfg-placement^="right"] > .lfg-floating-arrow {
+  top: 14px;
+  transform: none;
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-end"][data-lfg-placement^="left"] > .lfg-floating-arrow,
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-end"][data-lfg-placement^="right"] > .lfg-floating-arrow {
+  top: auto;
+  bottom: 14px;
+  transform: none;
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-start"][data-lfg-placement^="top"] > .lfg-floating-arrow,
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-start"][data-lfg-placement^="bottom"] > .lfg-floating-arrow {
+  left: 14px;
+  transform: none;
+}
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-end"][data-lfg-placement^="top"] > .lfg-floating-arrow,
+.lfg-floating[data-lfg-arrow][data-lfg-placement$="-end"][data-lfg-placement^="bottom"] > .lfg-floating-arrow {
+  left: auto;
+  right: 14px;
+  transform: none;
+}
+
+.lfg-action-menu-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  padding: 7px 12px;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.3;
+}
+
+.lfg-action-menu-item:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--lfg-cell-focus, var(--lfg-color-accent)) 15%, transparent);
+}
+
+.lfg-action-menu-item[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lfg-action-menu-icon {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.lfg-action-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--lfg-border, var(--lfg-color-border));
+  opacity: 0.4;
+}
+
+/* ── Cell menu trigger ── */
+.lfg-cell-menu-trigger {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in srgb, currentColor 58%, transparent);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.lfg-cell-menu-trigger-visible {
+  opacity: 0.75;
+}
+
+.lfg-cell-menu-trigger:hover,
+.lfg-cell-menu-trigger:focus-visible {
+  opacity: 1;
+  color: inherit;
+  background: color-mix(in srgb, var(--lfg-cell-focus, var(--lfg-color-accent)) 15%, transparent);
+}
+
+.lfg-cell-menu-trigger:focus-visible {
+  outline: 2px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: 2px;
+}
+
+/* ── Cell menu panel ── */
+.lfg-cell-menu-panel {
+  width: 220px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  background: var(--lfg-popup-bg, var(--lfg-header-bg, var(--lfg-color-surface)));
+  border: var(--lfg-border-width) solid
+    var(--lfg-popup-border, var(--lfg-border, var(--lfg-color-border)));
+  border-radius: var(--lfg-popup-radius, var(--lfg-radius-menu, 8px));
+  box-shadow: var(--lfg-popup-shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--lfg-popup-fg, var(--lfg-fg, var(--lfg-color-text, currentColor)));
+  box-sizing: border-box;
+}
+
+.lfg-cell-menu-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+
+.lfg-cell-menu-item:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--lfg-cell-focus, var(--lfg-color-accent)) 15%, transparent);
+}
+
+.lfg-cell-menu-item[disabled],
+.lfg-cell-menu-item[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lfg-cell-menu-item > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lfg-cell-menu-icon {
+  width: 18px;
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.lfg-cell-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--lfg-border, var(--lfg-color-border));
+  opacity: 0.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 10. CELL SHELLS
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Lightweight data-presentation primitives rendered inside pooled cells.
+ * Each shell kind gets a class `lfg-cell-shell-{kind}`; shared parts use
+ * `lfg-cell-shell-label`, `lfg-cell-shell-icon`, etc.
+ *
+ * Badge tones are driven by `data-tone` on the shell root. Tokens follow
+ * the pattern `--lfg-badge-{tone}-{bg|fg|dot|border}` and are set by the
+ * resolved theme palette (dark / light).
+ */
+
+/* ── Shared shell base ── */
+.lfg-cell-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.lfg-cell-shell [hidden] {
+  display: none !important;
+}
+
+.lfg-cell-shell-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Native boolean presentation control. Interaction is delegated by the grid. */
+.lfg-cell-shell-checkbox,
+.lfg-cell-shell-checkbox-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.lfg-cell-shell-checkbox-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lfg-cell-shell-checkbox-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Text shell ── */
+.lfg-cell-shell-text {
+  font: inherit;
+  color: inherit;
+}
+
+/* ── Badge shell ──
+ * Outlined status chip: tinted fill + tone border + hollow ring marker.
+ * Inactive/neutral use a concentric (radio) ring. */
+.lfg-cell-shell-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--lfg-badge-neutral-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  background: var(--lfg-badge-neutral-bg);
+  color: var(--lfg-badge-neutral-fg);
+}
+
+.lfg-cell-shell-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1.5px solid var(--lfg-badge-neutral-dot);
+}
+
+.lfg-cell-shell-badge .lfg-cell-shell-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Badge tones — each tone sets bg, fg, border, and ring color. */
+.lfg-cell-shell-badge[data-tone="active"] {
+  background: var(--lfg-badge-active-bg);
+  color: var(--lfg-badge-active-fg);
+  border-color: var(--lfg-badge-active-border);
+}
+.lfg-cell-shell-badge[data-tone="active"] .lfg-cell-shell-dot {
+  border-color: var(--lfg-badge-active-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="pending"] {
+  background: var(--lfg-badge-pending-bg);
+  color: var(--lfg-badge-pending-fg);
+  border-color: var(--lfg-badge-pending-border);
+}
+.lfg-cell-shell-badge[data-tone="pending"] .lfg-cell-shell-dot {
+  border-color: var(--lfg-badge-pending-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="inactive"] {
+  background: var(--lfg-badge-inactive-bg);
+  color: var(--lfg-badge-inactive-fg);
+  border-color: var(--lfg-badge-inactive-border);
+}
+.lfg-cell-shell-badge[data-tone="inactive"] .lfg-cell-shell-dot {
+  width: 5px;
+  height: 5px;
+  border-color: var(--lfg-badge-inactive-dot);
+  box-shadow: 0 0 0 1.75px var(--lfg-badge-inactive-bg),
+    0 0 0 3px var(--lfg-badge-inactive-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="success"] {
+  background: var(--lfg-badge-success-bg);
+  color: var(--lfg-badge-success-fg);
+  border-color: var(--lfg-badge-success-border);
+}
+.lfg-cell-shell-badge[data-tone="success"] .lfg-cell-shell-dot {
+  border-color: var(--lfg-badge-success-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="warning"] {
+  background: var(--lfg-badge-warning-bg);
+  color: var(--lfg-badge-warning-fg);
+  border-color: var(--lfg-badge-warning-border);
+}
+.lfg-cell-shell-badge[data-tone="warning"] .lfg-cell-shell-dot {
+  border-color: var(--lfg-badge-warning-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="danger"] {
+  background: var(--lfg-badge-danger-bg);
+  color: var(--lfg-badge-danger-fg);
+  border-color: var(--lfg-badge-danger-border);
+}
+.lfg-cell-shell-badge[data-tone="danger"] .lfg-cell-shell-dot {
+  border-color: var(--lfg-badge-danger-dot);
+}
+
+.lfg-cell-shell-badge[data-tone="neutral"] {
+  background: var(--lfg-badge-neutral-bg);
+  color: var(--lfg-badge-neutral-fg);
+  border-color: var(--lfg-badge-neutral-border);
+}
+.lfg-cell-shell-badge[data-tone="neutral"] .lfg-cell-shell-dot {
+  width: 5px;
+  height: 5px;
+  border-color: var(--lfg-badge-neutral-dot);
+  box-shadow: 0 0 0 1.75px var(--lfg-badge-neutral-bg),
+    0 0 0 3px var(--lfg-badge-neutral-dot);
+}
+
+/* ── PrefixSuffix shell ── */
+.lfg-cell-shell-prefix-suffix {
+  gap: 0;
+}
+
+.lfg-cell-shell-prefix,
+.lfg-cell-shell-suffix {
+  flex-shrink: 0;
+  color: var(--lfg-color-muted);
+  font-size: 0.92em;
+}
+
+/* ── Button shell ── */
+.lfg-cell-shell-button {
+  appearance: none;
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  background: transparent;
+  padding: 2px 8px;
+  border-radius: var(--lfg-radius-control, 3px);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--lfg-color-accent);
+  cursor: pointer;
+}
+
+.lfg-cell-shell-button:hover {
+  background: color-mix(in srgb, var(--lfg-color-accent) 12%, transparent);
+}
+
+.lfg-cell-shell-button .lfg-cell-shell-icon:empty {
+  display: none;
+}
+
+/* ── IconButton shell ── */
+.lfg-cell-shell-icon-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+  border-radius: var(--lfg-radius-control, 3px);
+}
+
+.lfg-cell-shell-icon-button:hover {
+  color: inherit;
+  background: color-mix(in srgb, var(--lfg-color-accent) 12%, transparent);
+}
+
+/* ── Link shell ── */
+.lfg-cell-shell-link {
+  color: var(--lfg-color-accent);
+  cursor: pointer;
+}
+
+.lfg-cell-shell-link .lfg-cell-shell-label {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+
+.lfg-cell-shell-link:hover .lfg-cell-shell-label {
+  text-decoration-color: currentColor;
+}
+
+/* ── Button group shell ── */
+.lfg-cell-shell-button-group {
+  gap: 2px;
+}
+
+.lfg-cell-shell-group-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border: none;
+  border-radius: var(--lfg-radius-control, 3px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lfg-cell-shell-group-button:hover {
+  background: color-mix(in srgb, var(--lfg-color-accent) 12%, transparent);
+}
+
+.lfg-cell-shell-group-button:focus-visible {
+  outline: 1.5px solid var(--lfg-color-accent);
+  outline-offset: -1px;
+}
+
+.lfg-cell-shell-group-button-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.lfg-cell-shell-group-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Rating shell ── */
+.lfg-cell-shell-rating {
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lfg-cell-shell-rating .lfg-cell-shell-icon {
+  color: var(--lfg-color-accent);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.lfg-cell-shell-rating .lfg-cell-shell-label {
+  min-width: 1ch;
+}
+
+/* ── Progress shell ── */
+.lfg-cell-shell-progress {
+  gap: 8px;
+  width: 100%;
+}
+
+.lfg-cell-shell-progress-track {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--lfg-color-border) 60%, transparent);
+  overflow: hidden;
+}
+
+.lfg-cell-shell-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--lfg-color-accent);
+  transform-origin: left center;
+  transform: scaleX(var(--lfg-cell-shell-progress-ratio, 0));
+}
+
+.lfg-cell-shell-progress .lfg-cell-shell-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
+  text-align: right;
+  color: var(--lfg-color-muted);
+}
+
+/* ── Image / avatar / iconText shells ── */
+.lfg-cell-shell-image,
+.lfg-cell-shell-image-text,
+.lfg-cell-shell-avatar,
+.lfg-cell-shell-avatar-text,
+.lfg-cell-shell-icon-text {
+  gap: 6px;
+}
+
+/* Square thumbnail — stable dimensions so rows never reflow on image load. */
+.lfg-cell-shell-img {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--lfg-radius-control, 3px);
+  background: color-mix(in srgb, var(--lfg-color-border) 40%, transparent);
+}
+
+/* Circular avatar variant. */
+.lfg-cell-shell-avatar-img {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--lfg-color-border) 40%, transparent);
+}
+
+/* Compact media for display-safe shell previews (filter selection lists, etc.). */
+.lfg-cell-shell-preview .lfg-cell-shell-img {
+  width: var(--lfg-filter-shell-img-width, 16px);
+  height: var(--lfg-filter-shell-img-height, 12px);
+  object-fit: contain;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.lfg-cell-shell-preview .lfg-cell-shell-avatar-img {
+  width: var(--lfg-filter-shell-avatar-size, 16px);
+  height: var(--lfg-filter-shell-avatar-size, 16px);
+}
+
+.lfg-cell-shell-icon-text .lfg-cell-shell-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 1;
+  color: var(--lfg-color-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 11. TOOLTIP
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.lfg-tooltip {
+  max-width: 300px;
+  padding: 4px 8px;
+  border-radius: var(--lfg-radius-tooltip, 4px);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: auto;
+  background: var(--lfg-tooltip-bg, var(--lfg-color-tooltip-bg));
+  color: var(--lfg-tooltip-color, var(--lfg-color-tooltip-fg));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 12. OVERLAYS (loading / no rows / no matching rows)
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.lfg-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+}
+
+.lfg-overlay-layer[data-visible="true"] {
+  display: flex;
+}
+
+.lfg-overlay {
+  pointer-events: auto;
+  max-width: min(420px, calc(100% - 32px));
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: var(--lfg-overlay-bg, var(--lfg-color-overlay-bg));
+  color: var(--lfg-overlay-fg, var(--lfg-fg, var(--lfg-color-overlay-fg)));
+  border: var(--lfg-border-width) solid var(--lfg-border, var(--lfg-color-border));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 13. PAGINATION FOOTER
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.lfg-pagination {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+  min-height: 58px;
+  padding: 10px 18px;
+  font-size: 13px;
+  border-top: var(--lfg-border-width) solid color-mix(
+    in srgb,
+    var(--lfg-border, var(--lfg-color-border)) 72%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--lfg-header-bg, var(--lfg-color-header-bg)) 94%,
+    var(--lfg-color-bg, transparent) 6%
+  );
+  color: var(--lfg-fg, var(--lfg-color-text, currentColor));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.lfg-pagination-summary {
+  justify-self: start;
+  min-width: 0;
+  margin-right: 0;
+  font-weight: 600;
+  opacity: 0.74;
+  white-space: nowrap;
+}
+
+.lfg-pagination-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.lfg-pagination-button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: var(--lfg-border-width) solid transparent;
+  border-radius: var(--lfg-radius-control, 6px);
+  background: var(--lfg-pagination-button-bg, transparent);
+  color: var(
+    --lfg-pagination-button-fg,
+    color-mix(in srgb, var(--lfg-fg, var(--lfg-color-text, currentColor)) 70%, transparent)
+  );
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.lfg-pagination-button:hover:not(.lfg-pagination-button-disabled):not(.lfg-pagination-button-active) {
+  background: var(
+    --lfg-pagination-button-hover-bg,
+    color-mix(in srgb, var(--lfg-color-surface-muted) 78%, transparent)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--lfg-border, var(--lfg-color-border)) 48%,
+    transparent
+  );
+  color: var(--lfg-pagination-button-hover-fg, var(--lfg-fg, var(--lfg-color-text, currentColor)));
+}
+
+.lfg-pagination-button-active {
+  color: var(
+    --lfg-pagination-button-active-fg,
+    var(--lfg-color-accent-fg, var(--lfg-color-overlay-fg, currentColor))
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--lfg-pagination-button-active-bg, var(--lfg-cell-focus, var(--lfg-color-accent))) 72%,
+    var(--lfg-color-bg, transparent)
+  );
+  background: var(
+    --lfg-pagination-button-active-bg,
+    var(--lfg-cell-focus, var(--lfg-color-accent))
+  );
+  box-shadow:
+    0 6px 14px color-mix(
+      in srgb,
+      var(--lfg-pagination-button-active-bg, var(--lfg-cell-focus, var(--lfg-color-accent))) 28%,
+      transparent
+    ),
+    inset 0 1px 0 color-mix(
+      in srgb,
+      var(--lfg-pagination-button-active-fg, var(--lfg-color-accent-fg, currentColor)) 18%,
+      transparent
+    );
+}
+
+.lfg-pagination-button-active:hover:not(.lfg-pagination-button-disabled) {
+  color: var(
+    --lfg-pagination-button-active-hover-fg,
+    var(--lfg-pagination-button-active-fg, #ffffff)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(
+      --lfg-pagination-button-active-hover-bg,
+      var(--lfg-pagination-button-active-bg, var(--lfg-cell-focus, var(--lfg-color-accent)))
+    ) 72%,
+    var(--lfg-color-bg, transparent)
+  );
+  background: var(
+    --lfg-pagination-button-active-hover-bg,
+    color-mix(
+      in srgb,
+      var(--lfg-pagination-button-active-bg, var(--lfg-cell-focus, var(--lfg-color-accent))) 88%,
+      black
+    )
+  );
+  box-shadow:
+    0 8px 16px color-mix(
+      in srgb,
+      var(
+        --lfg-pagination-button-active-hover-bg,
+        var(--lfg-pagination-button-active-bg, var(--lfg-cell-focus, var(--lfg-color-accent)))
+      ) 32%,
+      transparent
+    ),
+    inset 0 1px 0 color-mix(
+      in srgb,
+      var(
+        --lfg-pagination-button-active-hover-fg,
+        var(--lfg-pagination-button-active-fg, currentColor)
+      ) 18%,
+      transparent
+    );
+}
+
+.lfg-pagination-button-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.lfg-pagination-ellipsis {
+  min-width: 24px;
+  text-align: center;
+  opacity: 0.58;
+  user-select: none;
+}
+
+.lfg-pagination-page-size {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 0;
+  gap: 12px;
+}
+
+.lfg-pagination-page-size-label {
+  font-weight: 600;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.lfg-pagination-page-size-select {
+  min-width: 82px;
+  height: 36px;
+  padding: 0 32px 0 13px;
+  border: var(--lfg-border-width) solid color-mix(
+    in srgb,
+    var(--lfg-border, var(--lfg-color-border)) 62%,
+    transparent
+  );
+  border-radius: var(--lfg-radius-control, 6px);
+  background-color: color-mix(
+    in srgb,
+    var(--lfg-color-surface-muted) 78%,
+    transparent
+  );
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-repeat: no-repeat;
+  background-size: 6px 6px;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  appearance: none;
+}
+
+.lfg-pagination-button:focus-visible,
+.lfg-pagination-page-size-select:focus-visible {
+  outline: 2px solid var(--lfg-cell-focus, var(--lfg-color-accent));
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .lfg-pagination {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 10px;
+  }
+
+  .lfg-pagination-summary,
+  .lfg-pagination-pages,
+  .lfg-pagination-page-size {
+    justify-self: center;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * §N  CELL EDITING
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.lfg-cell-editor-host {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+  background: var(--lfg-color-bg, var(--lfg-bg));
+}
+
+.lfg-cell-editor-host[hidden] {
+  display: none;
+}
+
+.lfg-cell-editing {
+  overflow: visible;
+}
+
+.lfg-editor:not(.lfg-editor-checkbox) {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  padding: 0 var(--lfg-cell-padding-x);
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+.lfg-editor-select {
+  cursor: pointer;
+}
+
+.lfg-cell-editor-invalid {
+  outline: 2px solid var(--lfg-editor-invalid-color, var(--lfg-color-invalid));
+  outline-offset: -2px;
+}
+
+.lfg-editor-error {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lfg-a11y-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.lfg-a11y-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Filter dropdown
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Dedicated filter panel (`.lfg-column-filter-panel`) + form chrome.
+ * All visuals are driven by `--lfg-filter-*` tokens defined on `.lfg-grid`.
+ * Override those tokens on `.lfg-grid` (or an ancestor) to retheme.
+ */
+
+.lfg-column-filter-panel {
+  box-sizing: border-box;
+  width: var(--lfg-filter-panel-width, 240px);
+  min-width: var(--lfg-filter-panel-width, 240px);
+  max-height: min(70vh, 480px);
+  padding: 0;
+  overflow: hidden;
+  background: var(--lfg-filter-panel-bg, #151C2E);
+  color: var(--lfg-filter-panel-fg, #e8eef6);
+  border: 1px solid var(--lfg-filter-panel-border, #2d3748);
+  border-radius: var(--lfg-filter-panel-radius, 8px);
+  box-shadow: var(--lfg-filter-panel-shadow, 0 8px 24px rgba(0, 0, 0, 0.4));
+  font-family: var(--lfg-font-family);
+  font-size: var(--lfg-filter-control-font-size, 12px);
+  line-height: 1.3;
+  text-align: start;
+}
+
+.lfg-filter-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lfg-filter-panel-gap, 8px);
+  box-sizing: border-box;
+  max-height: inherit;
+  padding: var(--lfg-filter-panel-padding, 10px);
+  overflow: auto;
+  text-align: start;
+}
+
+.lfg-filter-field,
+.lfg-filter-condition-row,
+.lfg-filter-join-row,
+.lfg-filter-selection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lfg-filter-field-gap, 4px);
+  min-width: 0;
+}
+
+/* `display: flex` above must not defeat the HTML `hidden` attribute. */
+.lfg-filter-field[hidden],
+.lfg-filter-form-value[hidden],
+.lfg-filter-form-value-to[hidden],
+.lfg-filter-selection-status[hidden] {
+  display: none !important;
+}
+
+.lfg-filter-condition-row {
+  gap: var(--lfg-filter-panel-gap, 8px);
+}
+
+.lfg-filter-condition-row[data-condition="2"],
+.lfg-filter-selection {
+  padding-top: var(--lfg-filter-panel-gap, 8px);
+  border-top: 1px solid var(--lfg-filter-divider, var(--lfg-filter-panel-border, #2d3748));
+}
+
+.lfg-filter-field-label,
+.lfg-filter-selection-label {
+  margin: 0;
+  font-size: var(--lfg-filter-label-font-size, 11px);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-align: start;
+  color: var(--lfg-filter-label-fg, var(--lfg-filter-panel-muted, #8B95A7));
+}
+
+.lfg-filter-form-operator,
+.lfg-filter-form-value,
+.lfg-filter-form-value-to,
+.lfg-filter-selection-search {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: var(--lfg-filter-control-padding-y, 8px)
+    var(--lfg-filter-control-padding-x, 10px);
+  border: 1px solid var(--lfg-filter-control-border, var(--lfg-filter-panel-border, #2d3748));
+  border-radius: var(--lfg-filter-control-radius, 6px);
+  background: var(--lfg-filter-control-bg, #121820);
+  color: var(--lfg-filter-panel-fg, #e8eef6);
+  font: inherit;
+  line-height: 1.35;
+  outline: none;
+}
+
+.lfg-filter-form-operator,
+.lfg-filter-form-value:not([type="date"]),
+.lfg-filter-form-value-to:not([type="date"]),
+.lfg-filter-selection-search {
+  appearance: none;
+}
+
+.lfg-filter-form-operator {
+  background-image: linear-gradient(
+      45deg,
+      transparent 50%,
+      var(--lfg-filter-panel-muted, #8B95A7) 50%
+    ),
+    linear-gradient(
+      135deg,
+      var(--lfg-filter-panel-muted, #8B95A7) 50%,
+      transparent 50%
+    );
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-end: 28px;
+}
+
+.lfg-filter-form-operator:focus,
+.lfg-filter-form-value:focus,
+.lfg-filter-form-value-to:focus,
+.lfg-filter-selection-search:focus {
+  border-color: var(--lfg-filter-accent, #3B82F6);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--lfg-filter-accent, #3B82F6) 45%, transparent);
+}
+
+.lfg-filter-form-operator::placeholder,
+.lfg-filter-form-value::placeholder,
+.lfg-filter-form-value-to::placeholder,
+.lfg-filter-selection-search::placeholder {
+  color: var(--lfg-filter-panel-muted, #8B95A7);
+  opacity: 1;
+}
+
+/* Native date picker glyph is black by default in Chromium.
+ * Date inputs keep appearance so the indicator stays; under dark theme we
+ * replace the glyph with a light SVG (invert + color-scheme can cancel out). */
+.lfg-filter-form-value[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-filter-form-value-to[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-floating-filter-input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: 4px;
+  opacity: 0.85;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+.lfg-grid[data-theme="dark"]
+  .lfg-filter-form-value[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-grid[data-theme="dark"]
+  .lfg-filter-form-value-to[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-grid[data-theme="dark"]
+  .lfg-floating-filter-input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  filter: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23e8eef6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
+}
+
+.lfg-grid[data-theme="light"]
+  .lfg-filter-form-value[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-grid[data-theme="light"]
+  .lfg-filter-form-value-to[type="date"]::-webkit-calendar-picker-indicator,
+.lfg-grid[data-theme="light"]
+  .lfg-floating-filter-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 2v4'/%3E%3Cpath d='M16 2v4'/%3E%3Crect width='18' height='18' x='3' y='4' rx='2'/%3E%3Cpath d='M3 10h18'/%3E%3C/svg%3E");
+}
+
+/* Match: AND / OR segmented control — content-sized, not full panel width */
+.lfg-filter-join-toggle {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--lfg-filter-control-border, var(--lfg-filter-panel-border, #2d3748));
+  border-radius: var(--lfg-filter-control-radius, 5px);
+  background: var(--lfg-filter-control-bg, #121820);
+}
+
+.lfg-filter-join-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.lfg-filter-join-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0;
+  min-width: var(--lfg-filter-join-min-width, 2.75rem);
+  min-height: 22px;
+  padding: var(--lfg-filter-join-padding-y, 2px)
+    var(--lfg-filter-join-padding-x, 10px);
+  cursor: pointer;
+  user-select: none;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--lfg-filter-panel-muted, #8B95A7);
+  background: transparent;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.lfg-filter-join-label:hover {
+  color: var(--lfg-filter-panel-fg, #e8eef6);
+}
+
+.lfg-filter-join-input:checked + .lfg-filter-join-label {
+  color: var(--lfg-filter-accent-fg, #ffffff);
+  background: var(--lfg-filter-accent, #3B82F6);
+}
+
+.lfg-filter-join-input:focus-visible + .lfg-filter-join-label {
+  outline: 2px solid var(--lfg-filter-accent, #3B82F6);
+  outline-offset: -2px;
+}
+
+.lfg-filter-join-toggle .lfg-filter-join-label + .lfg-filter-join-input + .lfg-filter-join-label {
+  border-inline-start: 1px solid
+    var(--lfg-filter-control-border, var(--lfg-filter-panel-border, #2d3748));
+}
+
+.lfg-filter-join-input:checked + .lfg-filter-join-label {
+  border-inline-start-color: transparent;
+}
+
+/* Selection list */
+.lfg-filter-selection-separator {
+  display: none;
+}
+
+.lfg-filter-selection-search-wrap {
+  position: relative;
+}
+
+.lfg-filter-selection-search-wrap::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 12px;
+  height: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background-color: var(--lfg-filter-panel-muted, #8B95A7);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Ccircle cx='7' cy='7' r='4.5' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M10.5 10.5L13.5 13.5' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Ccircle cx='7' cy='7' r='4.5' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M10.5 10.5L13.5 13.5' stroke='black' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.lfg-filter-selection-search {
+  padding-inline-start: 30px;
+}
+
+.lfg-filter-selection-list {
+  max-height: var(--lfg-filter-list-max-height, 160px);
+  overflow: auto;
+  border: 1px solid var(--lfg-filter-control-border, var(--lfg-filter-panel-border, #2d3748));
+  border-radius: var(--lfg-filter-control-radius, 6px);
+  background: var(--lfg-filter-control-bg, #121820);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(
+      in srgb,
+      var(--lfg-filter-panel-muted, #8B95A7) 55%,
+      transparent
+    )
+    transparent;
+}
+
+.lfg-filter-selection-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--lfg-filter-panel-fg, #e8eef6);
+  font-size: var(--lfg-filter-control-font-size, 12px);
+  text-align: start;
+}
+
+.lfg-filter-selection-item + .lfg-filter-selection-item {
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--lfg-filter-panel-border, #2d3748) 70%,
+      transparent
+    );
+}
+
+.lfg-filter-selection-item:hover {
+  background: var(--lfg-filter-list-item-hover-bg);
+}
+
+.lfg-filter-selection-item-label {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lfg-filter-selection-item-label .lfg-cell-shell-preview {
+  max-width: 100%;
+  min-width: 0;
+  gap: 6px;
+}
+
+.lfg-filter-selection-item-label .lfg-cell-shell-preview .lfg-cell-shell-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lfg-filter-selection-item-label .lfg-cell-shell-preview .lfg-cell-shell-img,
+.lfg-filter-selection-item-label .lfg-cell-shell-preview .lfg-cell-shell-avatar-img {
+  flex-shrink: 0;
+}
+
+.lfg-filter-selection-item-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--lfg-filter-panel-muted, #8B95A7);
+}
+
+.lfg-filter-selection-status {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--lfg-filter-panel-muted, #8B95A7);
+}
+
+/* Status + Clear/Apply share one footer so the bottom edge reads as intentional. */
+.lfg-filter-form-footer {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 8px;
+  margin: 0;
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lfg-filter-divider, var(--lfg-filter-panel-border, #2d3748));
+}
+
+.lfg-filter-form-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+}
+
+.lfg-filter-form-clear,
+.lfg-filter-form-apply {
+  appearance: none;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  min-width: 0;
+  min-height: var(--lfg-filter-action-height, 30px);
+  padding: 0 var(--lfg-filter-action-padding-x, 12px);
+  border-radius: var(--lfg-filter-control-radius, 5px);
+  font-family: inherit;
+  font-size: var(--lfg-filter-control-font-size, 12px);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.lfg-filter-form-clear {
+  border: 1px solid var(--lfg-filter-control-border, var(--lfg-filter-panel-border, #2d3748));
+  background: var(--lfg-filter-clear-bg, transparent);
+  color: var(--lfg-filter-clear-fg, var(--lfg-filter-panel-fg, #e8eef6));
+}
+
+.lfg-filter-form-clear:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--lfg-filter-accent, #3B82F6) 35%,
+    var(--lfg-filter-panel-border, #2d3748)
+  );
+  color: #fff;
+}
+
+.lfg-filter-form-apply {
+  border: 1px solid transparent;
+  background: var(--lfg-filter-apply-bg, var(--lfg-filter-accent, #3B82F6));
+  color: var(--lfg-filter-apply-fg, #ffffff);
+  font-weight: 600;
+}
+
+.lfg-filter-form-apply:hover {
+  background: color-mix(
+    in srgb,
+    var(--lfg-filter-apply-bg, var(--lfg-filter-accent, #3B82F6)) 88%,
+    black
+  );
+}
+
+.lfg-filter-form-clear:focus-visible,
+.lfg-filter-form-apply:focus-visible {
+  outline: 2px solid var(--lfg-filter-accent, #3B82F6);
+  outline-offset: 1px;
+}
+
+/* Forms embedded in the column menu inherit the same form chrome. */
+.lfg-column-menu-panel .lfg-filter-form {
+  width: min(100%, var(--lfg-filter-panel-width, 240px));
+  text-align: start;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * Appendix: MEDIA QUERIES
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * There are no viewport/width media queries in this theme. The only media
+ * queries are `prefers-color-scheme: dark`, and each is colocated with the
+ * section it affects:
+ *   - Root design-token overrides (incl. badge tones) → §2 (Root and theme variables).
+ *   - Column-pinned cell backgrounds → §6 (Column pinning).
+ *   - Row-pinned lane/cell backgrounds → §8 (Row pinning).
+ *   - Cell shell badge tones → §10 (Cell shells) — dark/light via §2 root tokens.
+ * Add future dark/element overrides next to the rules they modify; reserve
+ * this section only for queries that genuinely span multiple sections.
+ */

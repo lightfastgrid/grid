@@ -1,0 +1,73 @@
+{
+  "name": "@lightfastgrid/core",
+  "version": "0.1.0",
+  "description": "Framework-agnostic JavaScript data grid for large client-side datasets.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "!dist/**/*.gz",
+    "!dist/**/*.br",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./themes/default.css": "./dist/themes/default.css"
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest run",
+    "test:watch": "vitest --watch",
+    "benchmark:accessibility-scroll": "vitest bench src/features/accessibility/__benchmarks__/continuousScroll.bench.ts",
+    "lint": "pnpm run typecheck",
+    "typecheck": "pnpm run typecheck:source && pnpm run typecheck:tests",
+    "typecheck:source": "tsc --noEmit -p tsconfig.source.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
+    "typecheck:package-output": "pnpm run typecheck:package-output:bundler && pnpm run typecheck:package-output:nodenext && pnpm run typecheck:package-output:node16",
+    "typecheck:package-output:bundler": "tsc --noEmit -p tsconfig.package-output.json",
+    "typecheck:package-output:nodenext": "tsc --noEmit -p tsconfig.package-output.nodenext.json",
+    "typecheck:package-output:node16": "tsc --noEmit -p tsconfig.package-output.node16.json"
+  },
+  "keywords": [
+    "data-grid",
+    "javascript",
+    "table",
+    "virtual-scroll",
+    "virtualization",
+    "performance",
+    "lightfastgrid"
+  ],
+  "author": "Manzoor",
+  "license": "MIT",
+  "homepage": "https://lightfastgrid.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lightfastgrid/grid.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/lightfastgrid/grid/issues"
+  },
+  "devDependencies": {
+    "@lightfastgrid/shared": "workspace:*",
+    "@types/jsdom": "^28.0.3",
+    "axe-core": "^4.12.1",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.4.0",
+    "vite": "^8.0.10",
+    "vitest": "^1.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

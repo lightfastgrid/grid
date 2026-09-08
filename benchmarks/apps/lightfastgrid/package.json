@@ -1,0 +1,28 @@
+{
+  "name": "@lfg-benchmarks/lightfastgrid",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run build:bundle && pnpm run build:runtime",
+    "build:bundle": "vite build --mode bundle",
+    "build:runtime": "vite build --mode runtime",
+    "preview": "vite preview --outDir dist/runtime",
+    "preview:bundle": "vite preview --outDir dist/bundle",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lfg-benchmarks/shared": "workspace:*",
+    "@lightfastgrid/core": "file:../../artifacts/lightfastgrid-core.tgz",
+    "@lightfastgrid/react": "file:../../artifacts/lightfastgrid-react.tgz",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.1",
+    "typescript": "5.9.3",
+    "vite": "8.0.10"
+  }
+}

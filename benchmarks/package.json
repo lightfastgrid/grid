@@ -1,0 +1,23 @@
+{
+  "name": "@lfg-benchmarks/workspace",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "prepare:packages": "node ./scripts/prepare-local-packages.mjs",
+    "build": "node ./scripts/build-all.mjs",
+    "bundle-sizes": "node ./scripts/measure-bundles.mjs",
+    "runtime": "node --experimental-strip-types ./scripts/run-runtime.mjs publish",
+    "runtime:smoke": "node --experimental-strip-types ./scripts/run-runtime.mjs smoke",
+    "runtime:native": "node --experimental-strip-types ./scripts/run-runtime.mjs publish-native",
+    "runtime:trace": "node --experimental-strip-types ./scripts/run-runtime.mjs trace",
+    "runtime:install": "node ./scripts/install-runtime-browser.mjs",
+    "verify:bundle-evidence": "node ./scripts/verify-bundle-evidence.mjs",
+    "verify": "node ./scripts/verify.mjs",
+    "capture-environment": "node ./scripts/capture-environment.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
