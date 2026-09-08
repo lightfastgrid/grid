@@ -2,7 +2,7 @@
  * gridDemo cell renderers (React / runtime only)
  * ---------------------------------------------------------------------------
  *
- * WHAT LIVES IN STATIC JSON (`schemas/lightfastgrid-customer-operations-1k.json` -> `columnDefs`)
+ * WHAT LIVES IN STATIC JSON (repo-root `schemas/lightfastgrid-customer-operations-1k.json` -> `columnDefs`)
  * ---------------------------------------------------------------------------
  * JSON-safe column wiring, e.g. `cellKind: "actions"`, `actionsKey: "rowActions"`
  * / `"customRowDropdown"`.

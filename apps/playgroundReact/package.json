@@ -12,6 +12,7 @@
     "test": "pnpm run test:grid-demo-dataset && pnpm run test:grid-demo-interactive",
     "transform:grid-demo-dataset": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
     "transform:grid-demo-dataset:smoke": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
+    "generate:grid-demo-datasets": "pnpm run generate:grid-demo-dataset:1k && pnpm run generate:grid-demo-dataset:10k && pnpm run generate:grid-demo-dataset:100k",
     "generate:grid-demo-dataset:1k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 1000",
     "generate:grid-demo-dataset:10k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 10000",
     "generate:grid-demo-dataset:100k": "node src/gridDemo/schemas/transform-dataset.mjs --rows 100000",

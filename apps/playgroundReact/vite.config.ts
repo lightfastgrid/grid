@@ -1,68 +1,13 @@
 import react from '@vitejs/plugin-react';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite';
 
+import { createPlaygroundDatasetPlugin } from '../../schemas/vite-plugin.ts';
+
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(appDir, '../..');
-
-const staticJsonMounts = [
-  {
-    urlPrefix: '/grid-demo/schemas/',
-    dir: path.resolve(appDir, 'src/gridDemo/schemas'),
-  },
-] as const;
-
-const bundledGridDemoDatasetFiles = [
-  'grid-demo-datasets.json',
-  'lightfastgrid-customer-operations-1k.json',
-] as const;
-
-/**
- * Serve large local JSON from app folders (not bundled).
- */
-function serveStaticJsonMounts(): Plugin {
-  return {
-    name: 'serve-static-json-mounts',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const reqUrl = req.url ?? '';
-        const mount = staticJsonMounts.find((entry) =>
-          reqUrl.startsWith(entry.urlPrefix),
-        );
-        if (!mount) {
-          next();
-          return;
-        }
-
-        const relative = reqUrl.slice(mount.urlPrefix.length).split('?')[0] ?? '';
-        if (!relative || relative.includes('..')) {
-          next();
-          return;
-        }
-
-        const filePath = path.resolve(mount.dir, relative);
-        if (!filePath.startsWith(mount.dir) || !fs.existsSync(filePath)) {
-          next();
-          return;
-        }
-
-        res.setHeader('Content-Type', 'application/json');
-        fs.createReadStream(filePath).pipe(res);
-      });
-    },
-    closeBundle() {
-      const sourceDir = path.resolve(appDir, 'src/gridDemo/schemas');
-      const destDir = path.resolve(appDir, 'dist/grid-demo/schemas');
-      fs.mkdirSync(destDir, { recursive: true });
-      for (const file of bundledGridDemoDatasetFiles) {
-        fs.copyFileSync(path.resolve(sourceDir, file), path.resolve(destDir, file));
-      }
-    },
-  };
-}
 
 /**
  * Core / adapter use imperative Grid instances created in an effect with `[]` deps.
@@ -98,7 +43,11 @@ function fullReloadOnLinkedPackages(root: string): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), serveStaticJsonMounts(), fullReloadOnLinkedPackages(workspaceRoot)],
+  plugins: [
+    react(),
+    createPlaygroundDatasetPlugin(workspaceRoot, appDir),
+    fullReloadOnLinkedPackages(workspaceRoot),
+  ],
   resolve: {
     alias: {
       "@lightfastgrid/core/themes/default.css": path.resolve(

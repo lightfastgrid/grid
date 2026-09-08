@@ -119,6 +119,12 @@ host view.
 - [Benchmarks and reproducible evidence](https://lightfastgrid.com/benchmarks)
 - [LightFastGrid website](https://lightfastgrid.com)
 
+## Playgrounds
+
+The React and Vanilla playgrounds load static demo JSON from
+[`schemas/`](./schemas) at `/grid-demo/schemas/*` (1k, 10k, and 100k). The
+default is 1,000 rows. Regenerate with `pnpm generate:grid-demo-datasets`.
+
 Package-specific setup details are available in
 [`packages/react/README.md`](./packages/react/README.md) and
 [`packages/core/README.md`](./packages/core/README.md).

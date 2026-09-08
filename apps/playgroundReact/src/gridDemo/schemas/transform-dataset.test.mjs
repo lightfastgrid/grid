@@ -70,12 +70,12 @@ describe("gridDemo dataset transforms", () => {
         {
           rowCount: 10_000,
           file: "lightfastgrid-customer-operations-10k.json",
-          delivery: "generated-static",
+          delivery: "repository",
         },
         {
           rowCount: 100_000,
           file: "lightfastgrid-customer-operations-100k.json",
-          delivery: "generated-static",
+          delivery: "repository",
         },
         { rowCount: 1_000_000, file: null, delivery: "block" },
       ],

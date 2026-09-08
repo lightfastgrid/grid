@@ -14,10 +14,9 @@ dist-ssr
 
 # Generated benchmark datasets
 public/datasets/lightfastgrid-*.json
+# Keep the AG Grid source JSON; generated 1k/10k/100k live in repo-root schemas/.
 src/gridDemo/schemas/*.json
 !src/gridDemo/schemas/ag-grid-100000x22-with-columns.json
-!src/gridDemo/schemas/lightfastgrid-customer-operations-1k.json
-!src/gridDemo/schemas/grid-demo-datasets.json
 
 # Editor directories and files
 .claude/*

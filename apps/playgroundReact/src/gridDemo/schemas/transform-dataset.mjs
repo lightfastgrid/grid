@@ -11,6 +11,9 @@
  *   node transform-dataset.mjs --rows 1000
  *   node transform-dataset.mjs --rows 10000
  *   node transform-dataset.mjs --in ag-grid-100000x22-with-columns.json --rows 100000
+ *
+ * Source JSON stays in this folder. Generated files are written to the
+ * repository-root `schemas/` directory used by both playgrounds.
  */
 
 import { once } from "node:events";
@@ -30,10 +33,12 @@ import {
 } from "./gridDemoDatasetProfiles.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, "../../../../..");
 
 export const DEFAULT_SOURCE_FILE = "ag-grid-100000x22-with-columns.json";
 export const DEFAULT_OUTPUT_FILE = DEFAULT_GRID_DEMO_DATASET_PROFILE.file;
 export const DATASET_MANIFEST_FILE = "grid-demo-datasets.json";
+export const SCHEMAS_DIR = path.resolve(REPO_ROOT, "schemas");
 export const MAX_STATIC_DATASET_ROWS = 100_000;
 
 /** @typedef {{ columnDefs?: unknown[]; rowData?: Record<string, unknown>[]; [key: string]: unknown }} DatasetSource */
@@ -58,11 +63,12 @@ export function parseArgs(argv) {
     } else if (arg === "--help" || arg === "-h") {
       console.log(`Usage: node transform-dataset.mjs [options]
 
-Transforms gridDemo/schemas/*.json using datasetTransforms.mjs hooks.
+Transforms the source JSON in this folder using datasetTransforms.mjs hooks
+and writes generated files to the repository-root schemas/ directory.
 
 Options:
   --in <file>           Source JSON in this folder (default: ${DEFAULT_SOURCE_FILE})
-  --out <file>          Output JSON in this folder (derived from --rows by default)
+  --out <file>          Output JSON in schemas/ (derived from --rows by default)
   --rows <n>            Generate N rows (default: ${DEFAULT_GRID_DEMO_DATASET_PROFILE.rowCount})
   --limit <n>           Backward-compatible alias for --rows
   --progress-every <n>  Log row progress every N rows (default: 10000)
@@ -176,7 +182,9 @@ export async function writeGridDataset(outPath, dataset, opts) {
 export async function runTransform(argv = process.argv) {
   const opts = parseArgs(argv);
   const inPath = path.resolve(__dirname, opts.in);
-  const outPath = path.resolve(__dirname, opts.out);
+  const outPath = path.isAbsolute(opts.out)
+    ? opts.out
+    : path.resolve(SCHEMAS_DIR, opts.out);
 
   if (!fs.existsSync(inPath)) {
     console.error(`Input not found: ${inPath}`);
@@ -219,7 +227,7 @@ export async function runTransform(argv = process.argv) {
     },
   };
 
-  const manifestPath = path.resolve(__dirname, DATASET_MANIFEST_FILE);
+  const manifestPath = path.resolve(SCHEMAS_DIR, DATASET_MANIFEST_FILE);
   fs.writeFileSync(
     manifestPath,
     `${JSON.stringify(buildGridDemoDatasetManifest(columnDefs.length), null, 2)}\n`,

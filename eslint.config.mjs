@@ -151,7 +151,10 @@ export default tseslint.config(
   },
   {
     // Node dataset generator / schema scripts (not browser playground UI).
-    files: ['apps/playgroundReact/src/gridDemo/schemas/**/*.{js,mjs,cjs}'],
+    files: [
+      'apps/playgroundReact/src/gridDemo/schemas/**/*.{js,mjs,cjs}',
+      'schemas/**/*.{js,mjs,cjs,ts}',
+    ],
     languageOptions: {
       globals: globals.node,
     },

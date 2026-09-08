@@ -8,5 +8,5 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force"
   },
-  "include": ["vite.config.ts"]
+  "include": ["vite.config.ts", "../../schemas/vite-plugin.ts"]
 }

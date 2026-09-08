@@ -23,7 +23,11 @@
     "benchmark:verify": "node benchmarks/scripts/verify.mjs",
     "validate": "pnpm run lint && pnpm run typecheck",
     "validate:fix": "pnpm run lint:fix && pnpm run typecheck",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run build:packages && pnpm run typecheck:package-output && pnpm run test"
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run build:packages && pnpm run typecheck:package-output && pnpm run test",
+    "generate:grid-demo-datasets": "pnpm --filter playground-react run generate:grid-demo-datasets",
+    "generate:grid-demo-dataset:1k": "pnpm --filter playground-react run generate:grid-demo-dataset:1k",
+    "generate:grid-demo-dataset:10k": "pnpm --filter playground-react run generate:grid-demo-dataset:10k",
+    "generate:grid-demo-dataset:100k": "pnpm --filter playground-react run generate:grid-demo-dataset:100k"
   },
   "keywords": [],
   "author": "",

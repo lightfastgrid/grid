@@ -1,4 +1,7 @@
-/** Shared default dataset — served from the React playground schemas folder. */
+/**
+ * Default committed showcase dataset in the repository-root `schemas/` folder.
+ * Served at `/grid-demo/schemas/*`.
+ */
 export const GRID_DEMO_DATASET_FILE =
   "lightfastgrid-customer-operations-1k.json";
 

@@ -1,13 +1,17 @@
 # LightFastGrid Vanilla playground
 
-Public example of `@lightfastgrid/core` without React. It loads a
-100,000 × 22 customer dataset at runtime and demonstrates virtualization,
-Quick Search, sorting, column filters, column visibility, pagination,
-column sizing and ordering, row selection, inline editing, CSV export,
-and worker-assisted execution.
+Public example of `@lightfastgrid/core` without React. After `pnpm dev`, it
+loads `schemas/lightfastgrid-customer-operations-1k.json` from the repository
+root at runtime (not bundled) and demonstrates virtualization, Quick Search,
+sorting, column filters, column visibility, pagination, column sizing and
+ordering, row selection, inline editing, CSV export, and worker-assisted
+execution.
 
 The main grid configuration lives in `src/gridDemo/gridDemo.ts` and
 `src/gridDemo/config/`.
+
+Generated demo JSON (1k, 10k, 100k) lives in the repository-root
+[`schemas/`](../../schemas) folder.
 
 ## Run
 
