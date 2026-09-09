@@ -66,6 +66,7 @@ import { DomFeatureHost } from "./dom/DomFeatureHost";
 import { DomPoolManager } from "./dom/DomPoolManager";
 import { PaginationFooter } from "./dom/PaginationFooter";
 import { applyColumnWidthVars } from "./helpers/applyColumnWidthVars";
+import { tryClearCellChangeFlashOnAnimationEnd } from "./helpers/cellChangeFlash";
 import { computeCenterSlotCount } from "./helpers/calculateColumnPoolSize";
 import { computeRowPoolSize } from "./helpers/calculatePoolSize";
 import { columnsStructureMatch, columnsWidthMatch } from "./helpers/columnDiff";
@@ -192,6 +193,7 @@ export class DomGridRenderer
   private currentFullDisplayRowsSource: RowView | null = null;
   private currentDataRevision = 0;
   private currentRenderChangeSet: RenderChangeSet | undefined;
+  private currentCellChangeFlash: RenderChangeSet | undefined;
   private currentRowSelection: RowSelectionConfig =
     normalizeRowSelection(undefined);
   private currentColumnSelection: ColumnSelectionConfig =
@@ -312,6 +314,10 @@ export class DomGridRenderer
       this.featureHost.syncFocusState();
       this.featureHost.syncEditingState();
     });
+  };
+
+  private readonly onCellChangeFlashEnd = (event: AnimationEvent): void => {
+    tryClearCellChangeFlashOnAnimationEnd(event.target, event.animationName);
   };
 
   constructor(options: GridContext) {
@@ -557,6 +563,10 @@ export class DomGridRenderer
     this.skeleton.viewport.addEventListener("scroll", this.onViewportScroll, {
       passive: true,
     });
+    this.skeleton.root.addEventListener(
+      "animationend",
+      this.onCellChangeFlashEnd,
+    );
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(() => {
         this.onViewportResize();
@@ -613,6 +623,7 @@ export class DomGridRenderer
     // Cache the latest snapshot so the overlay feature getter can read
     // loading/manualOverlay/overlays without a snapshot reference of its own.
     this.currentSnapshot = snapshot;
+    this.currentCellChangeFlash = snapshot.cellChangeFlash;
 
     // ── Styling-only fast path ──────────────────────────────────────────
     // GridState bumps `revision` on every state change EXCEPT row styling
@@ -628,7 +639,8 @@ export class DomGridRenderer
     const isStylingOnly =
       this.hasRenderedOnce &&
       (snapshot.dataRevision ?? 0) === this.currentDataRevision &&
-      nextRowStylingVersion !== this.currentRowStylingVersion;
+      nextRowStylingVersion !== this.currentRowStylingVersion &&
+      snapshot.cellChangeFlash === undefined;
     if (isStylingOnly) {
       this.applyRowStylingOnlyUpdate(snapshot, nextRowStylingVersion);
       // Overlays may depend on snapshot.loading / manualOverlay even when
@@ -652,6 +664,7 @@ export class DomGridRenderer
     // ── Full render path ───────────────────────────────────────────────
     this.currentDataRevision = snapshot.dataRevision ?? 0;
     this.currentRenderChangeSet = snapshot.renderChangeSet;
+    this.currentCellChangeFlash = snapshot.cellChangeFlash;
     this.currentRowSelection =
       snapshot.rowSelection ?? normalizeRowSelection(undefined);
     this.currentColumnSelection =
@@ -731,6 +744,7 @@ export class DomGridRenderer
     // Change metadata is consumed by this render; clear so scroll-driven
     // syncs don't apply stale skip logic.
     this.currentRenderChangeSet = undefined;
+    this.currentCellChangeFlash = undefined;
     this.featureHost.syncRowDragConfig();
     this.featureHost.syncColumnOrderConfig();
     this.featureHost.syncColumnSelectionFromConfig();
@@ -925,6 +939,7 @@ export class DomGridRenderer
   private applyDirtyPatch(snapshot: GridRenderSnapshot, plan: DirtyPatchPlan): void {
     const changeSet = snapshot.renderChangeSet!;
     const changedRows = changeSet.changedFieldsByRowId;
+    const flashRows = snapshot.cellChangeFlash?.changedFieldsByRowId;
     this._dirtyPatchRenderCount++;
     this.isDirtyPatching = true;
     try {
@@ -954,8 +969,13 @@ export class DomGridRenderer
       const colWin = this.windowSync.getLastColumnWindow();
       const colVer = this.windowSync.getColumnVersion();
 
-      // ── Iterate changed rows, not the full pool ─────────────────────────
-      for (const [rowId, changedFields] of changedRows) {
+      // ── Iterate changed and flash rows, not the full pool ──────────────
+      const patchRowIds = new Set(changedRows.keys());
+      if (flashRows) {
+        for (const rowId of flashRows.keys()) patchRowIds.add(rowId);
+      }
+      for (const rowId of patchRowIds) {
+        const changedFields = changedRows.get(rowId) ?? flashRows?.get(rowId);
         let hit = false;
 
         // Body pool rows (O(1) lookup).
@@ -979,6 +999,7 @@ export class DomGridRenderer
                 cellClassVersion: this.currentCellClassVersion,
                 cellRenderers: this.options.config.cellRenderers,
                 changedRows,
+                flashRows,
               });
 
             if (pinLayout.leftPinned.length > 0 && poolRow.pinnedElement) {
@@ -990,6 +1011,7 @@ export class DomGridRenderer
                 resolveCellClasses, this.currentCellClassVersion,
                 changedFields,
                 this.options.config.cellRenderers,
+                flashRows?.get(rowId),
               );
             }
             if (pinLayout.rightPinned.length > 0 && poolRow.rightPinnedElement) {
@@ -1001,6 +1023,7 @@ export class DomGridRenderer
                 resolveCellClasses, this.currentCellClassVersion,
                 changedFields,
                 this.options.config.cellRenderers,
+                flashRows?.get(rowId),
               );
             }
 
@@ -1014,8 +1037,9 @@ export class DomGridRenderer
         if (topBindings) {
           for (const b of topBindings) {
             this.patchLaneBinding(
-              b, changedFields, centerColumns, colWin, colVer,
+              b, centerColumns, colWin, colVer,
               resolveRowClasses, resolveCellClasses, isColSelected, pinLayout, changedRows,
+              flashRows,
             );
             hit = true;
           }
@@ -1026,8 +1050,9 @@ export class DomGridRenderer
         if (bottomBindings) {
           for (const b of bottomBindings) {
             this.patchLaneBinding(
-              b, changedFields, centerColumns, colWin, colVer,
+              b, centerColumns, colWin, colVer,
               resolveRowClasses, resolveCellClasses, isColSelected, pinLayout, changedRows,
+              flashRows,
             );
             hit = true;
           }
@@ -1046,12 +1071,12 @@ export class DomGridRenderer
 
     // Clear change metadata so scroll syncs don't apply stale skip logic.
     this.currentRenderChangeSet = undefined;
+    this.currentCellChangeFlash = undefined;
     this.featureHost.syncOverlays();
   }
 
   private patchLaneBinding(
     b: LaneRowBinding,
-    changedFields: ReadonlySet<string> | undefined,
     centerColumns: ColumnDef[],
     colWin: ReturnType<VirtualWindowSync["getLastColumnWindow"]>,
     colVer: number,
@@ -1060,6 +1085,7 @@ export class DomGridRenderer
     isColSelected: ((field: string) => boolean) | undefined,
     pinLayout: { leftPinned: ColumnDef[]; rightPinned: ColumnDef[] },
     changedRows: ReadonlyMap<string, ReadonlySet<string>>,
+    flashRows?: ReadonlyMap<string, ReadonlySet<string>>,
   ): void {
     const { entry, centerPoolRow, leftPoolRow, rightPoolRow } = b;
 
@@ -1070,43 +1096,56 @@ export class DomGridRenderer
       entry.row = freshRow;
     }
     const rowData = entry.row;
+    const bindOptions = {
+      dataRevision: this.currentDataRevision,
+      getRowId: this.boundResolveRowId,
+      isRowSelected: (id: string) => this.featureHost.isRowSelected(id),
+      isColumnSelected: isColSelected,
+      resolveRowClasses,
+      rowClassVersion: this.currentRowStylingVersion,
+      resolveCellClasses,
+      cellClassVersion: this.currentCellClassVersion,
+      cellRenderers: this.options.config.cellRenderers,
+      changedRows,
+      flashRows,
+    };
 
     if (colWin) {
       populateRow(centerPoolRow, rowData, centerColumns, entry.displayIndex, colWin, {
-        dataRevision: this.currentDataRevision,
+        ...bindOptions,
         columnVersion: colVer,
-        getRowId: this.boundResolveRowId,
-        isRowSelected: (id) => this.featureHost.isRowSelected(id),
-        isColumnSelected: isColSelected,
-        resolveRowClasses,
-        rowClassVersion: this.currentRowStylingVersion,
-        resolveCellClasses,
-        cellClassVersion: this.currentCellClassVersion,
-        cellRenderers: this.options.config.cellRenderers,
-        changedRows,
       });
     }
 
+    // Row-pinned left/right sub-lanes are ordinary pooled rows whose
+    // `cells` hold the pinned columns (not `pinnedCells`). Bind them with
+    // populateRow, matching `rowPinLaneDom`.
     if (leftPoolRow && pinLayout.leftPinned.length > 0) {
-      syncPinnedRowCells(
-        leftPoolRow, rowData, pinLayout.leftPinned, entry.displayIndex,
-        this.boundResolveRowId,
-        (id) => this.featureHost.isRowSelected(id),
-        isColSelected, "left",
-        resolveCellClasses, this.currentCellClassVersion,
-        changedFields,
-        this.options.config.cellRenderers,
+      populateRow(
+        leftPoolRow,
+        rowData,
+        pinLayout.leftPinned,
+        entry.displayIndex,
+        {
+          startIndex: 0,
+          slotCount: pinLayout.leftPinned.length,
+          toPhysicalCol: (v) => v,
+        },
+        bindOptions,
       );
     }
     if (rightPoolRow && pinLayout.rightPinned.length > 0) {
-      syncPinnedRowCells(
-        rightPoolRow, rowData, pinLayout.rightPinned, entry.displayIndex,
-        this.boundResolveRowId,
-        (id) => this.featureHost.isRowSelected(id),
-        isColSelected, "right",
-        resolveCellClasses, this.currentCellClassVersion,
-        changedFields,
-        this.options.config.cellRenderers,
+      populateRow(
+        rightPoolRow,
+        rowData,
+        pinLayout.rightPinned,
+        entry.displayIndex,
+        {
+          startIndex: 0,
+          slotCount: pinLayout.rightPinned.length,
+          toPhysicalCol: (v) => v,
+        },
+        bindOptions,
       );
     }
 
@@ -1300,6 +1339,7 @@ export class DomGridRenderer
       cellClassVersion: this.currentCellClassVersion,
       cellRenderers: this.options.config.cellRenderers,
       changedRows: this.currentRenderChangeSet?.changedFieldsByRowId,
+      flashRows: this.currentCellChangeFlash?.changedFieldsByRowId,
     };
 
     const metrics = this.options.config.layoutMetrics;
@@ -1469,6 +1509,7 @@ export class DomGridRenderer
       headerLaneRefs: pm.getHeaderLaneRefs(),
       syncHeaderAddons: (ctx) => this.featureHost.syncHeaderAddons(ctx),
       changedRows: this.currentRenderChangeSet?.changedFieldsByRowId,
+      flashRows: this.currentCellChangeFlash?.changedFieldsByRowId,
     });
   }
 
@@ -1959,9 +2000,14 @@ export class DomGridRenderer
         "scroll",
         this.onViewportScroll,
       );
+      this.skeleton.root.removeEventListener(
+        "animationend",
+        this.onCellChangeFlashEnd,
+      );
       this.skeleton.root.remove();
       this.skeleton = null;
     }
+    this.currentCellChangeFlash = undefined;
     this.currentColumns = [];
     this.currentUserColumns = [];
     this.currentSourceRows = [];

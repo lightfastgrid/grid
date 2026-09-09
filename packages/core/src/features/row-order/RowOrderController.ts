@@ -49,6 +49,8 @@ type PreparedRowDrag = {
   movingRowIdSet: Set<string>;
   fromIndex: number;
   fromIndices: number[];
+  /** Displayed-row reader identity for this drag session. */
+  displayRows: DisplayRowReader;
 };
 
 type ActiveDrag = {
@@ -81,6 +83,70 @@ export function computeRowDropIndex(
   return 0;
 }
 
+/**
+ * Translate a page/display insertion boundary into the source-row insertion
+ * boundary used by managed row-order commit.
+ *
+ * Dropping before a displayed row maps to that row's source index. Dropping
+ * after the final displayed row maps to that row's source index + 1.
+ */
+export function mapDisplayInsertionIndexToSourceIndex(
+  displayRows: DisplayRowReader,
+  displayInsertionIndex: number,
+): number {
+  if (!Number.isSafeInteger(displayInsertionIndex) || displayInsertionIndex < 0) {
+    return -1;
+  }
+  if (displayInsertionIndex < displayRows.rowCount) {
+    const sourceIndex = displayRows.getSourceIndex(displayInsertionIndex);
+    return sourceIndex >= 0 ? sourceIndex : -1;
+  }
+  if (displayInsertionIndex === displayRows.rowCount && displayRows.rowCount > 0) {
+    const lastSourceIndex = displayRows.getSourceIndex(displayRows.rowCount - 1);
+    return lastSourceIndex >= 0 ? lastSourceIndex + 1 : -1;
+  }
+  return -1;
+}
+
+function mapDisplayIndexToSourceIndex(
+  displayRows: DisplayRowReader,
+  displayIndex: number,
+): number {
+  if (!Number.isSafeInteger(displayIndex) || displayIndex < 0) {
+    return -1;
+  }
+  return displayRows.getSourceIndex(displayIndex);
+}
+
+function resolveManagedSourceIndexes(
+  displayRows: DisplayRowReader,
+  fromIndex: number,
+  fromIndices: readonly number[],
+  displayInsertionIndex: number,
+): { fromIndex: number; fromIndices: number[]; insertionIndex: number } | null {
+  const sourceFromIndex = mapDisplayIndexToSourceIndex(displayRows, fromIndex);
+  if (sourceFromIndex < 0) return null;
+
+  const sourceFromIndices: number[] = [];
+  for (const displayIndex of fromIndices) {
+    const sourceIndex = mapDisplayIndexToSourceIndex(displayRows, displayIndex);
+    if (sourceIndex < 0) return null;
+    sourceFromIndices.push(sourceIndex);
+  }
+
+  const insertionIndex = mapDisplayInsertionIndexToSourceIndex(
+    displayRows,
+    displayInsertionIndex,
+  );
+  if (insertionIndex < 0) return null;
+
+  return {
+    fromIndex: sourceFromIndex,
+    fromIndices: sourceFromIndices,
+    insertionIndex,
+  };
+}
+
 export class RowOrderController {
   private root: HTMLElement | null = null;
   private active: ActiveDrag | null = null;
@@ -91,6 +157,7 @@ export class RowOrderController {
   private guardWarnFired = false;
   private pendingCommandRowIndex = -1;
   private pendingCommandAdjacentIndex = -1;
+  private pendingCommandDisplayRows: DisplayRowReader | null = null;
   private commandMoveScheduled = false;
 
   // Preview tracking — center rows
@@ -145,6 +212,7 @@ export class RowOrderController {
     }
     this.pendingCommandRowIndex = -1;
     this.pendingCommandAdjacentIndex = -1;
+    this.pendingCommandDisplayRows = null;
     this.commandMoveScheduled = false;
   }
 
@@ -167,6 +235,7 @@ export class RowOrderController {
     }
     this.pendingCommandRowIndex = displayRowIndex;
     this.pendingCommandAdjacentIndex = adjacentDisplayRowIndex;
+    this.pendingCommandDisplayRows = this.deps.getDisplayRows();
     if (!this.commandMoveScheduled) {
       this.commandMoveScheduled = true;
       queueMicrotask(this.flushCommandMove);
@@ -178,12 +247,14 @@ export class RowOrderController {
     this.commandMoveScheduled = false;
     const fromIndex = this.pendingCommandRowIndex;
     const adjacentIndex = this.pendingCommandAdjacentIndex;
+    const captured = this.pendingCommandDisplayRows;
     this.pendingCommandRowIndex = -1;
     this.pendingCommandAdjacentIndex = -1;
+    this.pendingCommandDisplayRows = null;
+    if (captured === null || fromIndex < 0 || adjacentIndex < 0) return;
     const displayRows = this.deps.getDisplayRows();
+    if (displayRows !== captured) return;
     if (
-      fromIndex < 0 ||
-      adjacentIndex < 0 ||
       fromIndex >= displayRows.rowCount ||
       adjacentIndex >= displayRows.rowCount
     ) {
@@ -192,16 +263,23 @@ export class RowOrderController {
     const row = displayRows.getRowData(fromIndex);
     if (row === undefined) return;
     const rowId = this.deps.resolveRowId(row, fromIndex);
-    const insertionIndex = adjacentIndex < fromIndex
+    const displayInsertionIndex = adjacentIndex < fromIndex
       ? adjacentIndex
       : adjacentIndex + 1;
+    const mapped = resolveManagedSourceIndexes(
+      displayRows,
+      fromIndex,
+      [fromIndex],
+      displayInsertionIndex,
+    );
+    if (!mapped) return;
     this.deps.requestSync();
     this.deps.onRowOrderChanged?.({
       rowId,
       rowIds: [rowId],
-      fromIndex,
-      fromIndices: [fromIndex],
-      insertionIndex,
+      fromIndex: mapped.fromIndex,
+      fromIndices: mapped.fromIndices,
+      insertionIndex: mapped.insertionIndex,
       source: "keyboard",
     });
   };
@@ -393,6 +471,7 @@ export class RowOrderController {
           movingRowIdSet: new Set([rowId]),
           fromIndex,
           fromIndices: [fromIndex],
+          displayRows,
         };
       }
 
@@ -405,6 +484,7 @@ export class RowOrderController {
         movingRowIdSet: new Set(movingRowIds),
         fromIndex,
         fromIndices,
+        displayRows,
       };
     }
 
@@ -413,6 +493,7 @@ export class RowOrderController {
       movingRowIdSet: new Set([rowId]),
       fromIndex,
       fromIndices: [fromIndex],
+      displayRows,
     };
   }
 
@@ -592,16 +673,41 @@ export class RowOrderController {
 
     if (!commit || ev === null || !dragStarted || !act.prepared) return;
 
-    const insertionIndex = computeRowDropIndex(this.deps.getPool(), ev.clientY);
-    const result = this.deps.store.moveMany(act.prepared.rowIds, insertionIndex);
+    const displayInsertionIndex = computeRowDropIndex(
+      this.deps.getPool(),
+      ev.clientY,
+    );
+    let fromIndex = act.prepared.fromIndex;
+    let fromIndices = act.prepared.fromIndices;
+    let insertionIndex = displayInsertionIndex;
+
+    if (this.deps.getRowDragConfig().managed !== false) {
+      const currentDisplayRows = this.deps.getDisplayRows();
+      if (currentDisplayRows !== act.prepared.displayRows) return;
+      const mapped = resolveManagedSourceIndexes(
+        currentDisplayRows,
+        fromIndex,
+        fromIndices,
+        displayInsertionIndex,
+      );
+      if (!mapped) return;
+      fromIndex = mapped.fromIndex;
+      fromIndices = mapped.fromIndices;
+      insertionIndex = mapped.insertionIndex;
+    }
+
+    const result = this.deps.store.moveMany(
+      act.prepared.rowIds,
+      displayInsertionIndex,
+    );
     if (!result?.changed) return;
 
     this.deps.requestSync();
     this.deps.onRowOrderChanged?.({
       rowId: act.rowId,
       rowIds: result.movedRowIds,
-      fromIndex: act.prepared.fromIndex,
-      fromIndices: act.prepared.fromIndices,
+      fromIndex,
+      fromIndices,
       insertionIndex,
       source: "drag",
     });

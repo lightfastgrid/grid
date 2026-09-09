@@ -38,6 +38,7 @@ import type { ResolveHeaderControls } from "../headerControlTypes";
 import { applyColumnWidthVars } from "../helpers/applyColumnWidthVars";
 import { buildColumnLeftEdges } from "../helpers/columnLayout";
 import { HEADER_HEIGHT, ROW_HEIGHT } from "../helpers/gridConstants";
+import { clearRowCellChangeFlashes } from "../helpers/cellChangeFlash";
 import { type ColumnWindow, populateRow, rebindCells, type ResolveCellClassesFn, type ResolveRowClassesFn, syncPinnedRowCells } from "../helpers/populateRow";
 import { positionPinnedRow, positionRow } from "../helpers/positionRow";
 import {
@@ -168,6 +169,11 @@ export interface WindowSyncContext {
    * `syncPinnedRowCells` so unchanged rows/cells are skipped.
    */
   changedRows?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
+   * Transaction cell-change flash metadata for this bind. Distinct from
+   * {@link changedRows} so flashes survive full renders.
+   */
+  flashRows?: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 export interface SyncResult {
@@ -613,12 +619,15 @@ export class VirtualWindowSync {
 
       // Resolve changed fields once for pinned + center cell paths.
       const changedRows = ctx.changedRows;
+      const flashRows = ctx.flashRows;
       const rowId = ctx.getRowId?.(rowData, displayIndex) ?? String(displayIndex);
       const changedFields = changedRows?.get(rowId);
+      const flashFields = flashRows?.get(rowId);
       // Skip pinned cell work for unchanged rows when change metadata present.
       const skipPinned =
         changedRows !== undefined &&
         changedFields === undefined &&
+        flashFields === undefined &&
         poolRow.rowId === rowId &&
         poolRow.rowIndex === displayIndex;
 
@@ -629,7 +638,7 @@ export class VirtualWindowSync {
             poolRow, rowData, ctx.pinnedLeftColumns, displayIndex,
             ctx.getRowId, ctx.isRowSelected, ctx.isColumnSelected, "left",
             ctx.resolveCellClasses, ctx.cellClassVersion, changedFields,
-            ctx.cellRenderers,
+            ctx.cellRenderers, flashFields,
           );
         }
         poolRow.pinnedElement.style.display = "";
@@ -641,7 +650,7 @@ export class VirtualWindowSync {
             poolRow, rowData, ctx.pinnedRightColumns, displayIndex,
             ctx.getRowId, ctx.isRowSelected, ctx.isColumnSelected, "right",
             ctx.resolveCellClasses, ctx.cellClassVersion, changedFields,
-            ctx.cellRenderers,
+            ctx.cellRenderers, flashFields,
           );
         }
         poolRow.rightPinnedElement.style.display = "";
@@ -659,9 +668,11 @@ export class VirtualWindowSync {
         cellClassVersion: ctx.cellClassVersion,
         cellRenderers: ctx.cellRenderers,
         changedRows,
+        flashRows,
       });
       poolRow.element.style.display = "";
     } else {
+      clearRowCellChangeFlashes(poolRow);
       poolRow.element.style.display = "none";
       if (poolRow.pinnedElement) poolRow.pinnedElement.style.display = "none";
       if (poolRow.rightPinnedElement) poolRow.rightPinnedElement.style.display = "none";
@@ -706,6 +717,7 @@ export class VirtualWindowSync {
         cellClassVersion: ctx.cellClassVersion,
         cellRenderers: ctx.cellRenderers,
         changedRows: ctx.changedRows,
+        flashRows: ctx.flashRows,
       });
     }
   }
@@ -776,6 +788,7 @@ export class VirtualWindowSync {
         cellClassVersion: ctx.cellClassVersion,
         cellRenderers: ctx.cellRenderers,
         changedRows: ctx.changedRows,
+        flashRows: ctx.flashRows,
       });
     }
   }

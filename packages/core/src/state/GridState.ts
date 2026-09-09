@@ -133,6 +133,20 @@ import type { GridReadSnapshot } from './GridReadSnapshot';
 
 const noopResolveId: ResolveTransactionRowId = () => null;
 
+/** Same array, or the same row objects in the same order. */
+function isSameRowSequence(
+  left: readonly RowData[],
+  right: readonly RowData[],
+): boolean {
+  if (left === right) return true;
+  const length = left.length;
+  if (length !== right.length) return false;
+  for (let i = 0; i < length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
 /**
  * State facade — canonical source of truth for columns, rows, and
  * configuration. Coordinates state reads/writes but does not own
@@ -295,6 +309,18 @@ export class GridState {
   // metadata becomes stale and `consumeRenderChangeSetForRender()` ignores it.
   private _pendingDirtyRows: Map<string, ReadonlySet<string>> | null = null;
   private _dirtyRowsRevision = -1;
+  /**
+   * Short-lived transaction cell-change flash accumulator. Independent of
+   * `_pendingDirtyRows` so a sort/filter/Quick Search full recompute still
+   * flashes currently bound cells. Consumed once on the settled row-model
+   * render, not on intermediate pending renders.
+   */
+  private _pendingCellChangeFlash: Map<string, ReadonlySet<string>> | null = null;
+  /**
+   * Cached so the disabled transaction path is a boolean check, not an
+   * O(columns) scan on every applyTransaction.
+   */
+  private cellChangeFlashEnabled = false;
 
   // ── General revision counter ──────────────────────────────────────
   private revision = 0;
@@ -318,6 +344,7 @@ export class GridState {
       this.store.replaceAll(props.rows, initResolver);
     }
     this.defaultColDef = props.defaultColDef;
+    this.refreshCellChangeFlashEnabled();
     this.rowSelection = normalizeRowSelection(props.rowSelection);
     this.columnSelection = normalizeColumnSelection(props.columnSelection);
     this.columnOrder = normalizeColumnOrder(props.columnOrder);
@@ -365,7 +392,20 @@ export class GridState {
     return this._needsQuickSearchSchedule;
   }
 
+  /**
+   * Replace source rows. The caller's array is stored by reference.
+   *
+   * Pending cell-change flash is kept only when the incoming rows are the
+   * same objects in the same order as the current source (for example
+   * React echoing `applyTransaction().rows`). A different snapshot,
+   * order, or length still drops obsolete flash. Replacement, revision
+   * bumps, and invalidation always run.
+   */
   setRows(rows: RowData[], resolveId?: ResolveTransactionRowId): void {
+    const preserveCellChangeFlash = isSameRowSequence(
+      rows,
+      this.store.sourceRows,
+    );
     this.store.replaceAll(rows, resolveId ?? noopResolveId);
     // Source rows changed — any pending async results are stale.
     this.asyncSortedRowOrder = null;
@@ -388,10 +428,14 @@ export class GridState {
     this.rowRevision++;
     this._needsSortSchedule = true;
     this._needsFilterSchedule = this.hasActiveFilters();
+    if (!preserveCellChangeFlash) {
+      this.clearPendingCellChangeFlash();
+    }
   }
 
   setColumns(columns: LightFastGridColumnInput[]): void {
     this.applyColumnInput(columns);
+    this.refreshCellChangeFlashEnabled();
     const leafCols = this.columns ?? [];
     this.baselineWidths = buildBaselineWidths(this.columns);
     pruneRuntimeVisibility(this.runtimeColumnVisibility, leafCols);
@@ -423,6 +467,7 @@ export class GridState {
   setDefaultColDef(defaultColDef: LightFastGridDefaultColDef | undefined): boolean {
     if (defaultColDefsEqual(this.defaultColDef, defaultColDef)) return false;
     this.defaultColDef = defaultColDef;
+    this.refreshCellChangeFlashEnabled();
     this.filterConfigVersion++;
     this.quickSearchFieldsVersion++;
     this.rebuildQuickSearchDependencyPlan();
@@ -479,6 +524,7 @@ export class GridState {
         outcome.structural,
         outcome.structural ? layoutSnapshot : null,
       );
+      this.accumulateCellChangeFlash(outcome.dirty);
     }
     return outcome;
   }
@@ -499,6 +545,7 @@ export class GridState {
         outcome.structural,
         outcome.structural ? layoutSnapshot : null,
       );
+      this.accumulateCellChangeFlash(outcome.dirty);
     }
     return outcome;
   }
@@ -711,6 +758,76 @@ export class GridState {
     return changed;
   }
 
+  /**
+   * Whether sort, filter, or Quick Search still has in-flight row-model work.
+   * Intermediate pending renders must not consume transaction flash metadata.
+   */
+  isRowModelExecutionPending(): boolean {
+    return this.sortPending || this.filterPending || this.quickSearchPending;
+  }
+
+  /**
+   * Consume pending transaction cell-change flash metadata for a settled
+   * row-model render. Independent of {@link consumeRenderChangeSetForRender}
+   * so the visual flash survives sort/filter/Quick Search full recomputes.
+   *
+   * Returns `undefined` without clearing while row-model execution is
+   * pending. `setRows()` still replaces the store. Pending flash is
+   * dropped unless the incoming rows are the same objects in the same
+   * order as the current source.
+   */
+  consumeCellChangeFlashForRender(): ReadonlyMap<string, ReadonlySet<string>> | undefined {
+    if (this.isRowModelExecutionPending()) return undefined;
+    const pending = this._pendingCellChangeFlash ?? undefined;
+    this._pendingCellChangeFlash = null;
+    return pending;
+  }
+
+  private isCellChangeFlashConfigured(): boolean {
+    return this.cellChangeFlashEnabled;
+  }
+
+  private refreshCellChangeFlashEnabled(): void {
+    if (this.defaultColDef?.cellChangeFlash === true) {
+      this.cellChangeFlashEnabled = true;
+      return;
+    }
+    const cols = this.columns;
+    if (!cols) {
+      this.cellChangeFlashEnabled = false;
+      return;
+    }
+    for (let i = 0; i < cols.length; i++) {
+      if (cols[i]!.cellChangeFlash === true) {
+        this.cellChangeFlashEnabled = true;
+        return;
+      }
+    }
+    this.cellChangeFlashEnabled = false;
+  }
+
+  private accumulateCellChangeFlash(dirty: RowStoreDirtyMetadata): void {
+    if (!this.isCellChangeFlashConfigured()) return;
+    if (dirty.dirtyFieldsByRowId.size === 0) return;
+    const base = this._pendingCellChangeFlash ?? new Map<string, ReadonlySet<string>>();
+    for (const [rowId, fields] of dirty.dirtyFieldsByRowId) {
+      if (fields.size === 0) continue;
+      const existing = base.get(rowId);
+      if (existing) {
+        const merged = new Set(existing);
+        for (const field of fields) merged.add(field);
+        base.set(rowId, merged);
+      } else {
+        base.set(rowId, fields);
+      }
+    }
+    this._pendingCellChangeFlash = base.size > 0 ? base : null;
+  }
+
+  private clearPendingCellChangeFlash(): void {
+    this._pendingCellChangeFlash = null;
+  }
+
   private collectDirtyFields(dirty: RowStoreDirtyMetadata): ReadonlySet<string> {
     if (dirty.dirtyFieldsByRowId.size === 0) return new Set();
     if (dirty.dirtyFieldsByRowId.size === 1) {
@@ -918,6 +1035,7 @@ export class GridState {
       quickFilterTextField: col.quickFilterTextField ?? d?.quickFilterTextField,
       exportable: col.exportable ?? d?.exportable,
       exportValueField: col.exportValueField ?? d?.exportValueField,
+      cellChangeFlash: col.cellChangeFlash ?? d?.cellChangeFlash,
     };
   }
 

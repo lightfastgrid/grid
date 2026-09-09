@@ -71,7 +71,8 @@
  *   --lfg-badge-{tone}-bg, --lfg-badge-{tone}-fg, --lfg-badge-{tone}-dot,
  *   --lfg-badge-{tone}-border
  *   (tones: active, pending, inactive, success, warning, danger, neutral),
- *   --lfg-column-menu-icon-color, --lfg-filter-trigger-icon-color.
+ *   --lfg-column-menu-icon-color, --lfg-filter-trigger-icon-color,
+ *   --lfg-cell-change-flash-bg, --lfg-cell-change-flash-duration.
  *
  * Legacy tokens (still supported; take precedence when set):
  *   --lfg-border, --lfg-bg, --lfg-fg, --lfg-header-bg, --lfg-cell-focus,
@@ -103,6 +104,12 @@
 
   --lfg-column-menu-icon-color: #ffffff;
   --lfg-filter-trigger-icon-color: #ffffff;
+  --lfg-cell-change-flash-bg: color-mix(
+    in srgb,
+    var(--lfg-badge-success-dot, #34D399) 38%,
+    transparent
+  );
+  --lfg-cell-change-flash-duration: 900ms;
   --lfg-header-trigger-size: 20px;
   --lfg-header-trigger-icon-size: 14px;
   --lfg-header-controls-gap: 4px;
@@ -567,6 +574,43 @@
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
+}
+
+.lfg-cell.lfg-cell-change-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--lfg-cell-change-flash-bg);
+  animation: lfg-cell-change-flash-a var(--lfg-cell-change-flash-duration, 900ms) ease-out forwards;
+}
+
+.lfg-cell.lfg-cell-change-flash-a::after {
+  animation-name: lfg-cell-change-flash-a;
+}
+
+.lfg-cell.lfg-cell-change-flash-b::after {
+  animation-name: lfg-cell-change-flash-b;
+}
+
+@keyframes lfg-cell-change-flash-a {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes lfg-cell-change-flash-b {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lfg-cell.lfg-cell-change-flash::after,
+  .lfg-cell.lfg-cell-change-flash-a::after,
+  .lfg-cell.lfg-cell-change-flash-b::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 /* Adjacent action columns form one compact utility strip. Keep its internal

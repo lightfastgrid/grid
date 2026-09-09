@@ -30,6 +30,7 @@ export function defaultColDefsEqual(
     a.headerControls === b.headerControls &&
     a.cellShell === b.cellShell &&
     a.cellClassRules === b.cellClassRules &&
+    a.cellChangeFlash === b.cellChangeFlash &&
     cellClassEqual(a.cellClass, b.cellClass)
   );
 }

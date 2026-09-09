@@ -442,6 +442,11 @@ export class Grid implements GridAdapterApi, GridEventSource, GridLifecycle {
     this.bus.clear();
   }
 
+  /**
+   * Replace source rows. Always runs the replacement path (`data:updated`,
+   * invalidation, render scheduling). Pending cell-change flash is kept
+   * only when `rows` is the same object sequence as the current source.
+   */
   setRows(rows: RowData[]): void {
     this.assertAlive();
     this.state.setRows(rows, this.resolveTransactionRowId);
@@ -2107,9 +2112,19 @@ export class Grid implements GridAdapterApi, GridEventSource, GridLifecycle {
       if (!this.mounted || this.destroyed) return;
       const baseSnapshot = this.state.getSnapshot();
       const changedFields = this.state.consumeRenderChangeSetForRender();
-      const renderSnapshot: GridRenderSnapshot = changedFields
-        ? { ...baseSnapshot, renderChangeSet: { changedFieldsByRowId: changedFields } }
-        : baseSnapshot;
+      const cellChangeFlash = this.state.consumeCellChangeFlashForRender();
+      const renderSnapshot: GridRenderSnapshot =
+        changedFields || cellChangeFlash
+          ? {
+              ...baseSnapshot,
+              ...(changedFields
+                ? { renderChangeSet: { changedFieldsByRowId: changedFields } }
+                : {}),
+              ...(cellChangeFlash
+                ? { cellChangeFlash: { changedFieldsByRowId: cellChangeFlash } }
+                : {}),
+            }
+          : baseSnapshot;
       this.renderer.render(renderSnapshot);
     });
   }

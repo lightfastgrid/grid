@@ -11,6 +11,9 @@ export const CSS = {
   ROW:              'lfg-row',
   CELL:             'lfg-cell',
   CELL_VALUE:       'lfg-cell-value',
+  CELL_CHANGE_FLASH: 'lfg-cell-change-flash',
+  CELL_CHANGE_FLASH_A: 'lfg-cell-change-flash-a',
+  CELL_CHANGE_FLASH_B: 'lfg-cell-change-flash-b',
   /** Structural parent for pinned header leaf + addon rows. */
   PINNED_HEADER_STACK: 'lfg-pinned-header-stack',
   PINNED_LEFT_HEADER_STACK: 'lfg-pinned-left-header-stack',

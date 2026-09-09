@@ -184,6 +184,11 @@ export function useGridInstance(
   // id through the core (`setRowsImmutable`). The core falls back to
   // `setRows` (with a one-time dev warning) when `getRowId` is missing
   // so data is never lost.
+  //
+  // Echoing an accepted transaction's `result.rows` (same row objects
+  // in the same order) still runs setRows / setRowsImmutable. Pending
+  // cell-change flash is preserved for that equivalent sequence. A new
+  // object snapshot still drops obsolete flash metadata.
   useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;

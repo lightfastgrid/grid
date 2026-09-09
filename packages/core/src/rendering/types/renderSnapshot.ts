@@ -6,4 +6,10 @@ export interface RenderChangeSet {
 
 export type GridRenderSnapshot = GridSnapshot & {
   renderChangeSet?: RenderChangeSet;
+  /**
+   * Transaction cell-change flash metadata for this render only. Distinct
+   * from {@link renderChangeSet}: the dirty-patch change set may be cleared
+   * when sort/filter/Quick Search requires a full recompute.
+   */
+  cellChangeFlash?: RenderChangeSet;
 };

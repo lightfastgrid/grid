@@ -449,6 +449,43 @@ describe("Grid.setRowsImmutable", () => {
     destroyGrid(grid, container);
   });
 
+  it("equivalent sequence still commits, emits, and keeps skipped diagnostics", () => {
+    const onRowDataUpdated = vi.fn();
+    const a = { id: "a", v: 0 };
+    const orphan = { v: 1 };
+    const c = { id: "c", v: 2 };
+    const rows = [a, orphan, c];
+    const { grid, container } = createGrid({
+      rows,
+      getRowId: (row) => {
+        const id = row.id;
+        if (id === null || id === undefined || id === "") return null;
+        return String(id);
+      },
+      onRowDataUpdated,
+    });
+
+    const next = [a, orphan, c];
+    const result = grid.setRowsImmutable(next);
+
+    expect(result.rows).toBe(next);
+    expect(result.addCount + result.updateCount + result.removeCount).toBe(0);
+    expect(result.skippedCount).toBe(1);
+    expect(result.skipped[0]).toMatchObject({
+      row: orphan,
+      reason: "missingRowId",
+    });
+    expect(onRowDataUpdated).toHaveBeenCalledOnce();
+    expect(onRowDataUpdated.mock.calls[0]![0]).toMatchObject({
+      source: "immutableRows",
+      skippedCount: 1,
+      rowCount: 3,
+    });
+    expect((grid as unknown as GridTestInternals).state.getRows()).toBe(next);
+
+    destroyGrid(grid, container);
+  });
+
   it("without getRowId warns once and falls back to setRows", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { grid, container } = createGrid({ getRowId: undefined });

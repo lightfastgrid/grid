@@ -88,6 +88,27 @@ describe('GridState', () => {
     expect(snap.rowView.getSourceIndex(0)).toBe(0);
   });
 
+  it('merges defaultColDef.cellChangeFlash when column omits it', () => {
+    const state = new GridState({
+      ...baseProps,
+      defaultColDef: { cellChangeFlash: true },
+    });
+    expect(state.getSnapshot().columns[0]?.cellChangeFlash).toBe(true);
+  });
+
+  it('per-column cellChangeFlash false overrides defaultColDef', () => {
+    const state = new GridState({
+      columns: [
+        { field: 'n', cellChangeFlash: false },
+        { field: 'm' },
+      ],
+      rows: [{ n: 1, m: 2 }],
+      defaultColDef: { cellChangeFlash: true },
+    });
+    expect(state.getSnapshot().columns[0]?.cellChangeFlash).toBe(false);
+    expect(state.getSnapshot().columns[1]?.cellChangeFlash).toBe(true);
+  });
+
   it('merges defaultColDef flags when column omits them', () => {
     const state = new GridState({
       ...baseProps,

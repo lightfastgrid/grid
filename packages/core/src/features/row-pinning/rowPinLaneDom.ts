@@ -363,7 +363,9 @@ export function syncRowPinLaneDom(
     // populateRow without the force so cells/text are not re-bound.
     // When change metadata is present (update-only txn with stable order),
     // skip force so populateRow's change-set check can skip unchanged rows.
-    const hasChangeMetadata = bindOptions.changedRows !== undefined;
+    const hasChangeMetadata =
+      bindOptions.changedRows !== undefined ||
+      bindOptions.flashRows !== undefined;
     const force = !stylingOnly && !hasChangeMetadata;
     rebindSubLane(
       existing.centerPoolRows,

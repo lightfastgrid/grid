@@ -720,6 +720,22 @@ export interface ColumnDef {
    * worker-assisted and main-thread export values identical.
    */
   exportValueField?: string;
+  /**
+   * When true, briefly highlight currently rendered cells after a successful
+   * `applyTransaction` / `applyTransactionAsync` update of this column.
+   * Disabled by default. Internal, selection, row-drag, and action cells
+   * never flash.
+   *
+   * Ordinary field columns flash when the transaction dirty-field set
+   * touches `field` (including dot-path prefix matching), on the settled
+   * row-model render — including when that render rebinds the row onto a
+   * different pooled cell. Columns with `valueGetter` / `valueFormatter`
+   * flash only when the already-bound cell's previous display string
+   * differs from the new one. Undeclared cross-field `valueGetter`
+   * dependencies that do not change that bound display string are a v1
+   * non-flash boundary.
+   */
+  cellChangeFlash?: boolean;
 }
 
 /** Renderer/state snapshot produced by `GridState.getSnapshot()` — not intended for user construction. */
@@ -951,6 +967,12 @@ export interface LightFastGridColDef {
    * bypassing this column's `valueGetter` / `valueFormatter`.
    */
   exportValueField?: string;
+  /**
+   * When true, briefly highlight currently rendered cells after a successful
+   * `applyTransaction` / `applyTransactionAsync` update of this column.
+   * Disabled by default. See {@link ColumnDef.cellChangeFlash}.
+   */
+  cellChangeFlash?: boolean;
 }
 
 // ── Column Group Input Types ────────────────────────────────────────
@@ -1086,6 +1108,12 @@ export interface LightFastGridDefaultColDef {
   exportable?: boolean;
   /** Default CSV projection field. Per-column `exportValueField` overrides. */
   exportValueField?: string;
+
+  /**
+   * Default cell-change flash. Per-column `cellChangeFlash` overrides.
+   * See {@link ColumnDef.cellChangeFlash}.
+   */
+  cellChangeFlash?: boolean;
 }
 
 export interface LightFastGridSortChangedEvent {

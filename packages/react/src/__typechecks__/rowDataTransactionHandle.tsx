@@ -58,14 +58,14 @@ void immutable;
 
 // ── Props surface ─────────────────────────────────────────────────────
 //
-// There is no React runtime test harness in this repo, so behavioral
-// coverage for the prop wiring lives in two places:
+// Cell-change flash row-echo behavior is covered by
+// `cellChangeFlashSync.test.tsx`. Other prop-wiring coverage lives in:
 //  - `useGridInstance` routes `rows` prop changes through
 //    `grid.setRowsImmutable` when `immutableRows` is true, and syncs
 //    `asyncTransactionWaitMillis` via `grid.setAsyncTransactionWaitMillis`
 //    — a single code path with no adapter-side logic.
 //  - The core integration tests
-//    (`packages/core/src/__tests__/rowDataTransactions.test.ts`) cover
+//    (`packages/core/src/__tests__/grid/rowDataTransactions.test.ts`) cover
 //    `setRowsImmutable` diff semantics, the no-getRowId fallback, and
 //    wait-millis updates affecting future flushes.
 // This file type-proves the prop contract.

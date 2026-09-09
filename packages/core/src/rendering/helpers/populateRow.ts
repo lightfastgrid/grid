@@ -23,6 +23,10 @@ import {
 } from "../../internal/rowDragColumn";
 import type { CellRendererRegistry, ColumnDef, RowData } from "../../types";
 import { CSS } from "../const/css-classes";
+import {
+  clearCellChangeFlash,
+  syncCellChangeFlash,
+} from "./cellChangeFlash";
 import type { PooledCell, PooledRow } from "../types/types";
 
 import { formatCellValue, getCellRawValue } from "./cellValue";
@@ -56,6 +60,17 @@ function isFieldChanged(field: string, changedFieldSet: ReadonlySet<string>): bo
     if (changedFieldSet.has(prefix)) return true;
   }
   return false;
+}
+
+function resolveUpdateFields(
+  changedFields: ReadonlySet<string> | undefined,
+  flashFields: ReadonlySet<string> | undefined,
+): ReadonlySet<string> | undefined {
+  if (!changedFields) return flashFields;
+  if (!flashFields || flashFields === changedFields) return changedFields;
+  const merged = new Set(changedFields);
+  for (const field of flashFields) merged.add(field);
+  return merged;
 }
 
 /**
@@ -138,6 +153,13 @@ export interface PopulateRowOptions {
    * valueGetter columns always refresh for changed rows (conservative).
    */
   changedRows?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
+   * Transaction cell-change flash metadata for this bind. Distinct from
+   * {@link changedRows}: flash can still apply on the settled full render
+   * after sort/filter/Quick Search invalidates the dirty-patch change set,
+   * including when that render rebinds a targeted row onto a new slot.
+   */
+  flashRows?: ReadonlyMap<string, ReadonlySet<string>>;
   getRowId?: (row: RowData, dataIndex: number) => string;
   isRowSelected?: (rowId: string) => boolean;
   /** When column selection is enabled, toggles `.lfg-column-selected` on body cells. */
@@ -763,6 +785,8 @@ export function populateRow(
     : String(rowIndex);
   const dataRevision = options?.dataRevision ?? 0;
   const colVer = options?.columnVersion ?? 0;
+  const wasBoundToRow =
+    poolRow.rowId === newRowId && poolRow.rowIndex === rowIndex;
 
   syncRowSelectionDom(poolRow, row, columns, rowIndex, window, options);
 
@@ -772,6 +796,7 @@ export function populateRow(
   // This avoids row styling, cell value extraction, and cell class work
   // for unchanged rows while the vertical ring still reports "full".
   const changedRows = options?.changedRows;
+  const flashRows = options?.flashRows;
   if (
     changedRows !== undefined &&
     !layoutOnly &&
@@ -779,7 +804,7 @@ export function populateRow(
     poolRow.rowIndex === rowIndex &&
     poolRow.lastColumnVersion === colVer
   ) {
-    if (!changedRows.has(newRowId)) {
+    if (!changedRows.has(newRowId) && !flashRows?.has(newRowId)) {
       return;
     }
   }
@@ -886,6 +911,8 @@ export function populateRow(
 
   const { startIndex, slotCount, toPhysicalCol } = window;
   const changedFields = changedRows?.get(newRowId);
+  const flashFields = flashRows?.get(newRowId);
+  const updateFields = resolveUpdateFields(changedFields, flashFields);
 
   // TODO(perf): This loop is O(visibleColumns) per changed row. For wide
   // grids (100+ visible columns) updating a single field, a per-row
@@ -898,6 +925,7 @@ export function populateRow(
     const colIndex = startIndex + v;
     if (colIndex >= columns.length) {
       if (cell.shellKind !== undefined) clearShellAndResetCellValue(cell);
+      clearCellChangeFlash(cell);
       cell.element.style.display = "none";
       continue;
     }
@@ -905,6 +933,7 @@ export function populateRow(
     const col = columns[colIndex];
     if (!col) {
       if (cell.shellKind !== undefined) clearShellAndResetCellValue(cell);
+      clearCellChangeFlash(cell);
       cell.element.style.display = "none";
       continue;
     }
@@ -923,6 +952,7 @@ export function populateRow(
         applyManagedCellClasses(cell, []);
       }
       cell.lastCellClassVersion = cellClassVersion;
+      clearCellChangeFlash(cell);
 
       if (isCombinedRowControlsColumn(col)) {
         bindRowControlsBodyCell(
@@ -970,10 +1000,10 @@ export function populateRow(
     // valueGetter/valueFormatter/getCellClass/cellClassRules) qualify,
     // and the field must not have changed (with dot-path prefix matching).
     if (
-      changedFields !== undefined &&
+      updateFields !== undefined &&
       prevField === col.field &&
       isPlainFieldColumn(col) &&
-      !isFieldChanged(col.field, changedFields)
+      !isFieldChanged(col.field, updateFields)
     ) {
       continue;
     }
@@ -993,8 +1023,18 @@ export function populateRow(
     // pass. Same number of pipeline calls as before.
     const raw = getCellRawValue(row, rowIndex, col);
     const next = formatCellValue(raw, row, rowIndex, col);
+    const prevDisplay = cell.value;
 
     bindDataCellValue(cell, col, row, newRowId, rowIndex, prevField, raw, next);
+    if (!layoutOnly) {
+      syncCellChangeFlash(cell, {
+        column: col,
+        wasBoundToSameCell: wasBoundToRow && prevField === col.field,
+        flashFields,
+        prevDisplay,
+        nextDisplay: next,
+      });
+    }
     applyBodyColumnSelectedClass(cell.element, col, options?.isColumnSelected);
 
     // Cell-styling: apply managed classes for normal data cells only. v1
@@ -1056,6 +1096,7 @@ export function syncPinnedRowCells(
   cellClassVersion?: number,
   changedFields?: ReadonlySet<string>,
   cellRenderers?: CellRendererRegistry,
+  flashFields?: ReadonlySet<string>,
 ): void {
   const pinnedCells = side === "left" ? poolRow.pinnedCells : poolRow.rightPinnedCells;
   if (!pinnedCells) return;
@@ -1063,6 +1104,8 @@ export function syncPinnedRowCells(
   const rowId = getRowId ? getRowId(row, rowIndex) : String(rowIndex);
   const selected = isRowSelected?.(rowId) ?? false;
   const cellVer = cellClassVersion ?? 0;
+  const wasBoundToRow = poolRow.rowId === rowId && poolRow.rowIndex === rowIndex;
+  const updateFields = resolveUpdateFields(changedFields, flashFields);
 
   if (side === "left") applyRowSelectionRoot(poolRow, selected);
 
@@ -1088,9 +1131,12 @@ export function syncPinnedRowCells(
     // selection columns historically — the normal data-cell path that stamps
     // `data-col-id` and runs the value pipeline.
     const eligible = isCellStylingEligibleColumn(col);
-    if (!eligible && cell.managedCellClasses !== undefined) {
-      applyManagedCellClasses(cell, []);
-      cell.lastCellClassVersion = undefined;
+    if (!eligible) {
+      clearCellChangeFlash(cell);
+      if (cell.managedCellClasses !== undefined) {
+        applyManagedCellClasses(cell, []);
+        cell.lastCellClassVersion = undefined;
+      }
     }
 
     if (isCombinedRowControlsColumn(col)) {
@@ -1138,10 +1184,10 @@ export function syncPinnedRowCells(
 
     // Field-level skip for pinned cells (same rules as center).
     if (
-      changedFields !== undefined &&
+      updateFields !== undefined &&
       prevField === col.field &&
       isPlainFieldColumn(col) &&
-      !isFieldChanged(col.field, changedFields)
+      !isFieldChanged(col.field, updateFields)
     ) {
       continue;
     }
@@ -1151,8 +1197,16 @@ export function syncPinnedRowCells(
 
     const raw = getCellRawValue(row, rowIndex, col);
     const next = formatCellValue(raw, row, rowIndex, col);
+    const prevDisplay = cell.value;
 
     bindDataCellValue(cell, col, row, rowId, rowIndex, prevField, raw, next);
+    syncCellChangeFlash(cell, {
+      column: col,
+      wasBoundToSameCell: wasBoundToRow && prevField === col.field,
+      flashFields,
+      prevDisplay,
+      nextDisplay: next,
+    });
     applyBodyColumnSelectedClass(cell.element, col, isColumnSelected);
 
     if (eligible) {
@@ -1204,6 +1258,7 @@ export function rebindCells(
     const colIndex = startCol + v;
     if (colIndex >= columns.length) {
       if (cell.shellKind !== undefined) clearShellAndResetCellValue(cell);
+      clearCellChangeFlash(cell);
       cell.element.style.display = "none";
       continue;
     }
@@ -1211,6 +1266,7 @@ export function rebindCells(
     const col = columns[colIndex];
     if (!col) {
       if (cell.shellKind !== undefined) clearShellAndResetCellValue(cell);
+      clearCellChangeFlash(cell);
       cell.element.style.display = "none";
       continue;
     }
@@ -1220,6 +1276,7 @@ export function rebindCells(
     // on this physical slot, then take the column-specific path.
     // Shell bookkeeping is cleared inside bindSelectionBodyCell /
     // bindActionBodyCell, or below for other internal kinds.
+    clearCellChangeFlash(cell);
     if (!isCellStylingEligibleColumn(col)) {
       if (cell.managedCellClasses !== undefined) {
         applyManagedCellClasses(cell, []);

@@ -27,6 +27,15 @@ export interface PooledCell {
   shellRoot?: HTMLElement;
   shellClassNames?: string[];
   shellActionKey?: string;
+  /**
+   * Last started cell-change flash generation (`0` = A, `1` = B). Used to
+   * alternate CSS animation classes on restart without a forced layout
+   * read. `undefined` means this pooled cell has not started a flash since
+   * it was last cleared (recycle / explicit cancel). Active ownership is
+   * the flash CSS classes on {@link element}; `animationend` removes those
+   * classes in O(1) and does not scan the pool or reset this field.
+   */
+  flashAnim?: 0 | 1;
 }
 
 /** One row in the DOM pool: layout row element, cells, and bookkeeping. */

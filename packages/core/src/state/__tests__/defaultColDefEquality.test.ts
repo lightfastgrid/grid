@@ -18,6 +18,12 @@ describe('defaultColDefsEqual', () => {
     ).toBe(true);
   });
 
+  it('observes cellChangeFlash default changes', () => {
+    expect(defaultColDefsEqual({ cellChangeFlash: true }, { cellChangeFlash: true })).toBe(true);
+    expect(defaultColDefsEqual({ cellChangeFlash: true }, { cellChangeFlash: false })).toBe(false);
+    expect(defaultColDefsEqual({ cellChangeFlash: true }, {})).toBe(false);
+  });
+
   it('changed scalar config returns false', () => {
     expect(
       defaultColDefsEqual(

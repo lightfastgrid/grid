@@ -19,8 +19,8 @@ export function rowOrderFeature(options: RowOrderFeatureOptions): RowOrderFeatur
     if (cfg.managed !== false && options.commitRowOrder) {
       if (options.isReorderBlocked?.()) {
         console.warn(
-          "[LightFastGrid] Managed row reorder blocked: sort or filter is " +
-            "active. Disable sort/filter before reordering rows, or set " +
+          "[LightFastGrid] Managed row reorder blocked: sort is " +
+            "active. Disable sort before reordering rows, or set " +
             "rowDrag.managed=false to handle reorder yourself.",
         );
         store.clear();

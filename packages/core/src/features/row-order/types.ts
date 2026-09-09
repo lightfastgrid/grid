@@ -14,9 +14,18 @@ import type { RowOrderStore } from "./RowOrderStore";
 export interface RowOrderMoveRequest {
   rowId: string;
   rowIds: string[];
+  /**
+   * Controller-mapped origin indexes. Not passed into `commitRowOrder`.
+   * Managed public `fromIndex` / `fromIndices` / `toIndex` are recomputed
+   * by GridState from the committed source rows.
+   */
   fromIndex: number;
   fromIndices: number[];
-  /** Original insertion slot from pointer position (before any adjustment). */
+  /**
+   * Only this field drives the managed Grid commit.
+   * Unmanaged: current displayed-subset coordinates, used with lazy getters.
+   * Managed: source-row insertion mapped through DisplayRowReader.
+   */
   insertionIndex: number;
   source: RowOrderChangeSource;
 }

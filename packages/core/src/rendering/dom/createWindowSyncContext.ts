@@ -62,6 +62,7 @@ export function createWindowSyncContext(args: {
   headerLaneRefs?: HeaderLaneRefs | null;
   syncHeaderAddons?: (ctx: HeaderAddonSyncContext) => void;
   changedRows?: ReadonlyMap<string, ReadonlySet<string>>;
+  flashRows?: ReadonlyMap<string, ReadonlySet<string>>;
 }): WindowSyncContext {
   const { pinningLayout } = args;
   return {
@@ -109,5 +110,6 @@ export function createWindowSyncContext(args: {
     headerLaneRefs: args.headerLaneRefs,
     syncHeaderAddons: args.syncHeaderAddons,
     changedRows: args.changedRows,
+    flashRows: args.flashRows,
   };
 }

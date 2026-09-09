@@ -2,14 +2,52 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { DRAG_START_THRESHOLD_PX } from "../../drag/DragSession";
 import { Grid } from "../../../Grid";
+import type { PooledRow } from "../../../internal/poolTypes";
+import type { DisplayRowReader } from "../../../rendering/rowViewAccess";
 import { GridState } from "../../../state/GridState";
 import type {
   LightFastGridRowOrderChangedEvent,
+  RowData,
   RowOrderChangeSource,
 } from "../../../types";
+import {
+  mapDisplayInsertionIndexToSourceIndex,
+  ROW_DRAG_HANDLE_CLASS,
+} from "../RowOrderController";
 import { RowOrderStore } from "../RowOrderStore";
 import type { RowOrderMoveRequest } from "../types";
+
+function createMappedDisplayRowReader(
+  pageRows: RowData[],
+  sourceIndexes: readonly number[],
+): DisplayRowReader {
+  return {
+    get rowCount() {
+      return pageRows.length;
+    },
+    getSourceIndex(displayIndex: number): number {
+      if (displayIndex < 0 || displayIndex >= pageRows.length) return -1;
+      return sourceIndexes[displayIndex] ?? -1;
+    },
+    getRowData(displayIndex: number): RowData | undefined {
+      return displayIndex >= 0 && displayIndex < pageRows.length
+        ? pageRows[displayIndex]
+        : undefined;
+    },
+    getRow(displayIndex: number) {
+      if (displayIndex < 0 || displayIndex >= pageRows.length) return null;
+      const row = pageRows[displayIndex];
+      if (row === undefined) return null;
+      return {
+        displayIndex,
+        sourceIndex: sourceIndexes[displayIndex] ?? -1,
+        row,
+      };
+    },
+  };
+}
 
 // ─── GridState.moveRowsByIds ──────────────────────────────────────────────────
 
@@ -120,6 +158,7 @@ function commitRowOrder(
   grid: Grid,
   rowId: string,
   toIndex: number,
+  source: RowOrderChangeSource = "drag",
 ): LightFastGridRowOrderChangedEvent | null {
   const action = (grid as unknown as {
     ctx: {
@@ -128,12 +167,19 @@ function commitRowOrder(
           id: string,
           ids: string[],
           index: number,
-          source: "drag",
+          source: RowOrderChangeSource,
         ) => LightFastGridRowOrderChangedEvent | null;
       };
     };
   }).ctx.actions.commitRowOrder;
-  return action?.(rowId, [rowId], toIndex, "drag") ?? null;
+  return action?.(rowId, [rowId], toIndex, source) ?? null;
+}
+
+function currentPageIds(grid: Grid): string[] {
+  const pagination = grid.getPaginationState();
+  return (grid.getRows() as Array<{ id: string }>)
+    .slice(pagination.startRow - 1, pagination.endRow)
+    .map((row) => row.id);
 }
 
 describe("Grid managed row reorder commit", () => {
@@ -228,8 +274,8 @@ function buildTestableInterceptor(opts: CommitInterceptorOpts): {
     if (opts.managed !== false) {
       if (opts.isBlocked) {
         console.warn(
-          "[LightFastGrid] Managed row reorder blocked: sort or filter is " +
-            "active. Disable sort/filter before reordering rows, or set " +
+          "[LightFastGrid] Managed row reorder blocked: sort is " +
+            "active. Disable sort before reordering rows, or set " +
             "rowDrag.managed=false to handle reorder yourself.",
         );
         store.clear();
@@ -312,7 +358,7 @@ describe("rowOrderFeature commit interception", () => {
     expect(commitRowOrder).not.toHaveBeenCalled();
     expect(onRowOrderChanged).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("sort or filter is active"),
+      expect.stringContaining("sort is active"),
     );
     warnSpy.mockRestore();
   });
@@ -434,5 +480,186 @@ describe("managed commit receives insertionIndex (no double adjustment)", () => 
     handle(multiMove);
     expect(commitRowOrder).toHaveBeenCalledWith("a", ["a", "c"], 4, "drag");
     expect(onRowOrderChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("managed row reorder with pagination", () => {
+  function makePagedGrid(onRowOrderChanged = vi.fn()) {
+    const rows = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, v: i }));
+    const grid = new Grid({
+      rows,
+      columns: [{ field: "v" }],
+      pagination: true,
+      paginationPageSize: 5,
+      rowDrag: { enabled: true, managed: true },
+      getRowId: (row) => String((row as { id: string }).id),
+      onRowOrderChanged,
+    });
+    grid.setPageIndex(1);
+    return { grid, rows, onRowOrderChanged };
+  }
+
+  it("page 2 drop-before commit keeps the row on page 2 and reports source indexes", () => {
+    const { grid, rows, onRowOrderChanged } = makePagedGrid();
+    const pageRows = rows.slice(5, 10);
+    const reader = createMappedDisplayRowReader(pageRows, [5, 6, 7, 8, 9]);
+    const insertionIndex = mapDisplayInsertionIndexToSourceIndex(reader, 3);
+    expect(insertionIndex).toBe(8);
+
+    const event = commitRowOrder(grid, "r6", insertionIndex);
+    expect(event).not.toBeNull();
+    expect(onRowOrderChanged).toHaveBeenCalledOnce();
+    const cbEvent = onRowOrderChanged.mock.calls[0][0] as LightFastGridRowOrderChangedEvent;
+    expect(cbEvent.fromIndex).toBe(6);
+    expect(cbEvent.fromIndices).toEqual([6]);
+    expect(cbEvent.toIndex).toBe(7);
+    expect(cbEvent.getRowOrderIds()).toEqual([
+      "r0", "r1", "r2", "r3", "r4", "r5", "r7", "r6", "r8", "r9",
+    ]);
+    expect(grid.getPaginationState().pageIndex).toBe(1);
+    expect(currentPageIds(grid)).toEqual(["r5", "r7", "r6", "r8", "r9"]);
+    expect(currentPageIds(grid)).toContain("r6");
+    grid.destroy();
+  });
+
+  it("page 2 drop-after commit uses the source insertion and stays on page 2", () => {
+    const { grid, rows, onRowOrderChanged } = makePagedGrid();
+    const pageRows = rows.slice(5, 10);
+    const reader = createMappedDisplayRowReader(pageRows, [5, 6, 7, 8, 9]);
+    const insertionIndex = mapDisplayInsertionIndexToSourceIndex(reader, 4);
+    expect(insertionIndex).toBe(9);
+
+    const event = commitRowOrder(grid, "r6", insertionIndex);
+    expect(event).not.toBeNull();
+    expect(onRowOrderChanged.mock.calls[0][0].fromIndex).toBe(6);
+    expect(onRowOrderChanged.mock.calls[0][0].toIndex).toBe(8);
+    expect(currentPageIds(grid)).toEqual(["r5", "r7", "r8", "r6", "r9"]);
+    grid.destroy();
+  });
+
+  it("managed keyboard commit on page 2 uses source coordinates", () => {
+    const { grid, onRowOrderChanged } = makePagedGrid();
+    const event = commitRowOrder(grid, "r6", 8, "keyboard");
+    expect(event).not.toBeNull();
+    expect(event!.source).toBe("keyboard");
+    expect(event!.fromIndex).toBe(6);
+    expect(event!.fromIndices).toEqual([6]);
+    expect(event!.toIndex).toBe(7);
+    expect(onRowOrderChanged).toHaveBeenCalledOnce();
+    expect(currentPageIds(grid)).toContain("r6");
+    grid.destroy();
+  });
+
+  it("a page-local insertionIndex would incorrectly move the row onto page 1", () => {
+    const { grid } = makePagedGrid();
+    commitRowOrder(grid, "r6", 3);
+    expect(currentPageIds(grid)).not.toContain("r6");
+    expect((grid.getRows() as Array<{ id: string }>).map((row) => row.id)[3]).toBe("r6");
+    grid.destroy();
+  });
+});
+
+describe("mounted paginated managed row drag", () => {
+  async function flushRenders(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  function mockPoolRowGeometry(grid: Grid, rowHeight = 40): PooledRow[] {
+    const pool = (
+      grid as unknown as { renderer: { poolManager: { pool: PooledRow[] } } }
+    ).renderer.poolManager.pool;
+    const active = pool.filter((pr) => pr.rowIndex >= 0);
+    expect(active).toHaveLength(5);
+    for (const pr of active) {
+      const top = pr.rowIndex * rowHeight;
+      vi.spyOn(pr.element, "getBoundingClientRect").mockReturnValue({
+        top,
+        bottom: top + rowHeight,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: rowHeight,
+        x: 0,
+        y: top,
+        toJSON: () => "",
+      } as DOMRect);
+    }
+    return pool;
+  }
+
+  it("page-two pointer drag commits through the production Grid path", async () => {
+    const rows = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, v: i }));
+    const onRowOrderChanged = vi.fn();
+    const container = document.createElement("div");
+    Object.assign(container.style, { height: "400px", width: "600px" });
+    document.body.appendChild(container);
+    const grid = new Grid({
+      rows,
+      columns: [{ field: "v" }],
+      pagination: true,
+      paginationPageSize: 5,
+      rowDrag: { enabled: true, managed: true },
+      suppressRowVirtualization: true,
+      suppressColumnVirtualization: true,
+      getRowId: (row) => String((row as { id: string }).id),
+      onRowOrderChanged,
+    });
+    try {
+      grid.mount(container);
+      await flushRenders();
+      grid.setPageIndex(1);
+      await flushRenders();
+      mockPoolRowGeometry(grid);
+
+      const handle = container.querySelector(
+        `.lfg-pinned-row[data-row-id="r6"] .${ROW_DRAG_HANDLE_CLASS}`,
+      ) as HTMLElement | null;
+      expect(handle).toBeTruthy();
+
+      handle!.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          pointerId: 1,
+          button: 0,
+          clientX: 10,
+          clientY: 50,
+        }),
+      );
+      document.dispatchEvent(
+        new PointerEvent("pointermove", {
+          pointerId: 1,
+          clientX: 10,
+          clientY: 50 + DRAG_START_THRESHOLD_PX + 1,
+        }),
+      );
+      document.dispatchEvent(
+        new PointerEvent("pointerup", {
+          pointerId: 1,
+          clientX: 10,
+          clientY: 130,
+        }),
+      );
+      await flushRenders();
+
+      expect(onRowOrderChanged).toHaveBeenCalledOnce();
+      const event = onRowOrderChanged.mock.calls[0][0] as LightFastGridRowOrderChangedEvent;
+      expect(event.fromIndex).toBe(6);
+      expect(event.fromIndices).toEqual([6]);
+      expect(event.toIndex).toBe(7);
+      expect(event.source).toBe("drag");
+      expect((grid.getRows() as Array<{ id: string }>).map((row) => row.id)).toEqual([
+        "r0", "r1", "r2", "r3", "r4", "r5", "r7", "r6", "r8", "r9",
+      ]);
+      expect(grid.getPaginationState().pageIndex).toBe(1);
+      expect(currentPageIds(grid)).toEqual(["r5", "r7", "r6", "r8", "r9"]);
+      expect(currentPageIds(grid)).toContain("r6");
+    } finally {
+      grid.destroy();
+      container.remove();
+    }
   });
 });

@@ -9,6 +9,7 @@ import type { RowData } from "../../../types";
 import { DRAG_START_THRESHOLD_PX } from "../../drag/DragSession";
 import {
   computeRowDropIndex,
+  mapDisplayInsertionIndexToSourceIndex,
   ROW_DRAG_BLOCKED_CLASS,
   ROW_DRAG_ENABLED_CLASS,
   ROW_DRAG_HANDLE_CLASS,
@@ -91,7 +92,7 @@ function mountController(
   const store = new RowOrderStore();
   const controller = new RowOrderController({
     getRowDragConfig: () => ({ enabled, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-    getDisplayRows: () => createArrayDisplayRowReader(rows),
+    getDisplayRows: holdDisplayRows(rows),
     getPool: () => pool,
     resolveRowId: (_, i) => rows[i]!.id,
     getSelectedRowCountForRowOrder: () => 0,
@@ -117,8 +118,78 @@ function mountController(
   };
 }
 
+/** Page-local display rows mapped to explicit source indexes (e.g. 0…4 → 5…9). */
+function createMappedDisplayRowReader(
+  pageRows: RowData[],
+  sourceIndexes: readonly number[],
+): DisplayRowReader {
+  return {
+    get rowCount() {
+      return pageRows.length;
+    },
+    getSourceIndex(displayIndex: number): number {
+      if (displayIndex < 0 || displayIndex >= pageRows.length) return -1;
+      return sourceIndexes[displayIndex] ?? -1;
+    },
+    getRowData(displayIndex: number): RowData | undefined {
+      return displayIndex >= 0 && displayIndex < pageRows.length
+        ? pageRows[displayIndex]
+        : undefined;
+    },
+    getRow(displayIndex: number) {
+      if (displayIndex < 0 || displayIndex >= pageRows.length) return null;
+      const row = pageRows[displayIndex];
+      if (row === undefined) return null;
+      return {
+        displayIndex,
+        sourceIndex: sourceIndexes[displayIndex] ?? -1,
+        row,
+      };
+    },
+  };
+}
+
+function holdDisplayRows(rows: RowData[]): () => DisplayRowReader {
+  const reader = createArrayDisplayRowReader(rows);
+  return () => reader;
+}
+
+function holdMappedDisplayRows(
+  pageRows: RowData[],
+  sourceIndexes: readonly number[],
+): () => DisplayRowReader {
+  const reader = createMappedDisplayRowReader(pageRows, sourceIndexes);
+  return () => reader;
+}
+
 function nudgeY(startY: number): number {
   return startY + DRAG_START_THRESHOLD_PX + 1;
+}
+
+function dragHandleTo(handle: HTMLElement, startY: number, dropY: number): void {
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 1,
+      button: 0,
+      clientX: 10,
+      clientY: startY,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", {
+      pointerId: 1,
+      clientX: 10,
+      clientY: nudgeY(startY),
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointerup", {
+      pointerId: 1,
+      clientX: 10,
+      clientY: dropY,
+    }),
+  );
 }
 
 // ─── computeRowDropIndex ─────────────────────────────────────────────────────
@@ -285,7 +356,7 @@ describe("RowOrderController – syncConfig", () => {
     const cfg = { value: initialEnabled };
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: cfg.value, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader([]),
+      getDisplayRows: holdDisplayRows([]),
       getPool: () => [],
       resolveRowId: (_, i) => String(i),
       getSelectedRowCountForRowOrder: () => 0,
@@ -351,7 +422,7 @@ describe("RowOrderController – syncConfig", () => {
     const cfg = { value: true };
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: cfg.value, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 0,
@@ -639,7 +710,7 @@ describe("RowOrderController – commit on pointerup", () => {
     const store = new RowOrderStore();
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 0,
@@ -712,7 +783,7 @@ describe("RowOrderController – commit on pointerup", () => {
     const store = new RowOrderStore();
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 0,
@@ -824,7 +895,7 @@ describe("RowOrderController – multi-row drag", () => {
     const sel = [...selectedIds];
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => sel.length,
@@ -866,7 +937,7 @@ describe("RowOrderController – multi-row drag", () => {
     const store = new RowOrderStore();
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 1,
@@ -908,7 +979,7 @@ describe("RowOrderController – multi-row drag", () => {
     const store = new RowOrderStore();
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 2,
@@ -981,7 +1052,7 @@ describe("RowOrderController – multi-row drag", () => {
     const store = new RowOrderStore();
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 2,
@@ -1039,7 +1110,7 @@ describe("RowOrderController – deferred row scan", () => {
     });
     const sel = overrides.sel ?? [];
     const store = new RowOrderStore();
-    const getDisplayRows = overrides.getDisplayRows ?? vi.fn(() => createArrayDisplayRowReader(rows));
+    const getDisplayRows = overrides.getDisplayRows ?? vi.fn(holdDisplayRows(rows));
     const resolveRowId = overrides.resolveRowId ?? vi.fn((_: unknown, i: number) => rows[i]!.id);
     const getSelectedRowCountForRowOrder = overrides.getSelectedRowCountForRowOrder ?? vi.fn(() => sel.length);
     const isRowSelectedForRowOrder = overrides.isRowSelectedForRowOrder ?? vi.fn((id: string) => sel.includes(id));
@@ -1242,7 +1313,7 @@ describe("RowOrderController – deferred row scan", () => {
         maxMultiRowDragCount: 1000,
         maxMultiRowDragRatio: 0.5,
       }),
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 0,
@@ -1397,7 +1468,7 @@ describe("RowOrderController blocked state", () => {
     const controller = new RowOrderController({
       getRowDragConfig: () => ({ enabled: true, managed: true, maxMultiRowDragCount: 1000, maxMultiRowDragRatio: 0.5 }),
       isReorderBlocked: () => isBlocked,
-      getDisplayRows: () => createArrayDisplayRowReader(rows),
+      getDisplayRows: holdDisplayRows(rows),
       getPool: () => pool,
       resolveRowId: (_, i) => rows[i]!.id,
       getSelectedRowCountForRowOrder: () => 0,
@@ -1503,7 +1574,10 @@ describe("RowOrderController blocked state", () => {
 describe("RowOrderController keyboard command", () => {
   it("180: accepts adjacent managed movement in O(1) and defers row reads", async () => {
     const rows: RowData[] = [{ id: "r0" }, { id: "r1" }, { id: "r2" }];
-    const getDisplayRows = vi.fn(() => createArrayDisplayRowReader(rows));
+    const reader = createArrayDisplayRowReader(rows);
+    const getRowData = vi.spyOn(reader, "getRowData");
+    const getSourceIndex = vi.spyOn(reader, "getSourceIndex");
+    const getDisplayRows = vi.fn(() => reader);
     const requestSync = vi.fn();
     const onRowOrderChanged = vi.fn();
     const controller = new RowOrderController({
@@ -1526,11 +1600,13 @@ describe("RowOrderController keyboard command", () => {
 
     expect(controller.moveRowFromCommand(1, 2)).toBe(true);
     expect(controller.moveRowFromCommand(1, 1)).toBe(false);
-    expect(getDisplayRows).not.toHaveBeenCalled();
+    expect(getDisplayRows).toHaveBeenCalledOnce();
+    expect(getRowData).not.toHaveBeenCalled();
+    expect(getSourceIndex).not.toHaveBeenCalled();
     expect(requestSync).not.toHaveBeenCalled();
     await Promise.resolve();
 
-    expect(getDisplayRows).toHaveBeenCalledOnce();
+    expect(getDisplayRows).toHaveBeenCalledTimes(2);
     expect(requestSync).toHaveBeenCalledOnce();
     expect(onRowOrderChanged).toHaveBeenCalledWith({
       rowId: "r1",
@@ -1563,5 +1639,498 @@ describe("RowOrderController keyboard command", () => {
 
     expect(controller.moveRowFromCommand(0, 1)).toBe(false);
     expect(getDisplayRows).not.toHaveBeenCalled();
+  });
+
+  it("maps page-local keyboard movement to source coordinates", async () => {
+    const pageRows: RowData[] = [
+      { id: "r5" }, { id: "r6" }, { id: "r7" }, { id: "r8" }, { id: "r9" },
+    ];
+    const onRowOrderChanged = vi.fn();
+    const requestSync = vi.fn();
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed: true,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows: holdMappedDisplayRows(pageRows, [5, 6, 7, 8, 9]),
+      getPool: () => [],
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      requestSync,
+      onRowOrderChanged,
+      store: new RowOrderStore(),
+    });
+
+    expect(controller.moveRowFromCommand(1, 2)).toBe(true);
+    await Promise.resolve();
+
+    expect(onRowOrderChanged).toHaveBeenCalledWith({
+      rowId: "r6",
+      rowIds: ["r6"],
+      fromIndex: 6,
+      fromIndices: [6],
+      insertionIndex: 8,
+      source: "keyboard",
+    });
+    expect(requestSync).toHaveBeenCalledOnce();
+  });
+
+  it("does not emit a keyboard move when source-index resolution fails", async () => {
+    const pageRows: RowData[] = [
+      { id: "r5" }, { id: "r6" }, { id: "r7" }, { id: "r8" }, { id: "r9" },
+    ];
+    const onRowOrderChanged = vi.fn();
+    const requestSync = vi.fn();
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed: true,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows: holdMappedDisplayRows(pageRows, [5, 6, 7, -1, 9]),
+      getPool: () => [],
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      requestSync,
+      onRowOrderChanged,
+      store: new RowOrderStore(),
+    });
+
+    expect(controller.moveRowFromCommand(1, 2)).toBe(true);
+    await Promise.resolve();
+
+    expect(requestSync).not.toHaveBeenCalled();
+    expect(onRowOrderChanged).not.toHaveBeenCalled();
+  });
+
+  it("replaces coalesced keyboard indexes and view token together", async () => {
+    const rows: RowData[] = [{ id: "r0" }, { id: "r1" }, { id: "r2" }];
+    const readerA = createArrayDisplayRowReader(rows);
+    const readerB = createArrayDisplayRowReader(rows);
+    let current = readerA;
+    const requestSync = vi.fn();
+    const onRowOrderChanged = vi.fn();
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed: true,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows: () => current,
+      getPool: () => [],
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      requestSync,
+      onRowOrderChanged,
+      store: new RowOrderStore(),
+    });
+
+    expect(controller.moveRowFromCommand(1, 2)).toBe(true);
+    current = readerB;
+    expect(controller.moveRowFromCommand(0, 2)).toBe(true);
+    await Promise.resolve();
+
+    expect(onRowOrderChanged).toHaveBeenCalledOnce();
+    expect(onRowOrderChanged).toHaveBeenCalledWith({
+      rowId: "r0",
+      rowIds: ["r0"],
+      fromIndex: 0,
+      fromIndices: [0],
+      insertionIndex: 3,
+      source: "keyboard",
+    });
+    expect(requestSync).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed if the displayed view is replaced before the keyboard microtask", async () => {
+    const rows: RowData[] = [{ id: "r0" }, { id: "r1" }, { id: "r2" }];
+    const readerA = createArrayDisplayRowReader(rows);
+    const readerB = createArrayDisplayRowReader(rows);
+    let current = readerA;
+    const requestSync = vi.fn();
+    const onRowOrderChanged = vi.fn();
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed: true,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows: () => current,
+      getPool: () => [],
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      requestSync,
+      onRowOrderChanged,
+      store: new RowOrderStore(),
+    });
+
+    expect(controller.moveRowFromCommand(1, 2)).toBe(true);
+    current = readerB;
+    await Promise.resolve();
+
+    expect(requestSync).not.toHaveBeenCalled();
+    expect(onRowOrderChanged).not.toHaveBeenCalled();
+  });
+
+  it("does not retain a pending view token after detach", async () => {
+    const rows: RowData[] = [{ id: "r0" }, { id: "r1" }, { id: "r2" }];
+    const reader = createArrayDisplayRowReader(rows);
+    const getDisplayRows = vi.fn(() => reader);
+    const requestSync = vi.fn();
+    const onRowOrderChanged = vi.fn();
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed: true,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows,
+      getPool: () => [],
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      requestSync,
+      onRowOrderChanged,
+      store: new RowOrderStore(),
+    });
+
+    expect(controller.moveRowFromCommand(1, 2)).toBe(true);
+    expect(getDisplayRows).toHaveBeenCalledOnce();
+    controller.detach();
+    await Promise.resolve();
+    expect(getDisplayRows).toHaveBeenCalledOnce();
+    expect(requestSync).not.toHaveBeenCalled();
+    expect(onRowOrderChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("mapDisplayInsertionIndexToSourceIndex", () => {
+  const pageRows: RowData[] = [
+    { id: "r5" }, { id: "r6" }, { id: "r7" }, { id: "r8" }, { id: "r9" },
+  ];
+  const reader = createMappedDisplayRowReader(pageRows, [5, 6, 7, 8, 9]);
+
+  it("maps a drop before a displayed row to that row's source index", () => {
+    expect(mapDisplayInsertionIndexToSourceIndex(reader, 3)).toBe(8);
+  });
+
+  it("maps a drop after the final displayed row to last source index + 1", () => {
+    expect(mapDisplayInsertionIndexToSourceIndex(reader, 5)).toBe(10);
+  });
+
+  it("is a no-op for identity/page-1 mappings", () => {
+    const identity = createArrayDisplayRowReader(pageRows);
+    expect(mapDisplayInsertionIndexToSourceIndex(identity, 3)).toBe(3);
+    expect(mapDisplayInsertionIndexToSourceIndex(identity, 5)).toBe(5);
+  });
+
+  it("fails closed for invalid display or source indexes", () => {
+    expect(mapDisplayInsertionIndexToSourceIndex(reader, -1)).toBe(-1);
+    expect(mapDisplayInsertionIndexToSourceIndex(reader, 6)).toBe(-1);
+    expect(mapDisplayInsertionIndexToSourceIndex(reader, 1.5)).toBe(-1);
+    const invalid = createMappedDisplayRowReader(pageRows, [5, 6, 7, -1, 9]);
+    expect(mapDisplayInsertionIndexToSourceIndex(invalid, 3)).toBe(-1);
+    const empty = createMappedDisplayRowReader([], []);
+    expect(mapDisplayInsertionIndexToSourceIndex(empty, 0)).toBe(-1);
+  });
+});
+
+describe("RowOrderController – paginated managed source mapping", () => {
+  // Controller onRowOrderChanged here is the internal RowOrderMoveRequest.
+  // Only insertionIndex is passed to commitRowOrder; public event indexes
+  // are recomputed by GridState from the committed source rows.
+  function mountPaged(
+    options: {
+      managed?: boolean;
+      sourceIndexes?: readonly number[];
+      pageRows?: RowData[];
+    } = {},
+  ) {
+    const pageRows = options.pageRows ?? [
+      { id: "r5" }, { id: "r6" }, { id: "r7" }, { id: "r8" }, { id: "r9" },
+    ];
+    const sourceIndexes = options.sourceIndexes ?? [5, 6, 7, 8, 9];
+    const managed = options.managed ?? true;
+    const root = document.createElement("div");
+    root.className = "lfg-grid";
+    document.body.appendChild(root);
+    const pool: PooledRow[] = pageRows.map((r, i) => {
+      const pr = makePoolRow(i, String(r.id), i * 40, 40);
+      root.appendChild(pr.element);
+      makeHandle(pr.element);
+      return pr;
+    });
+    const store = new RowOrderStore();
+    const onRowOrderChanged = vi.fn();
+    const requestSync = vi.fn();
+    const baseReader = createMappedDisplayRowReader(pageRows, sourceIndexes);
+    const getSourceIndex = vi.fn((displayIndex: number) =>
+      baseReader.getSourceIndex(displayIndex),
+    );
+    const reader: DisplayRowReader = {
+      get rowCount() {
+        return baseReader.rowCount;
+      },
+      getSourceIndex,
+      getRowData: (i) => baseReader.getRowData(i),
+      getRow: (i) => baseReader.getRow(i),
+    };
+    let currentReader: DisplayRowReader = reader;
+    const controller = new RowOrderController({
+      getRowDragConfig: () => ({
+        enabled: true,
+        managed,
+        maxMultiRowDragCount: 1000,
+        maxMultiRowDragRatio: 0.5,
+      }),
+      getDisplayRows: () => currentReader,
+      getPool: () => pool,
+      resolveRowId: (row) => String(row.id),
+      getSelectedRowCountForRowOrder: () => 0,
+      isRowSelectedForRowOrder: () => false,
+      getSelectedRowIdsForRowOrder: () => [],
+      getViewport: () => null,
+      requestSync,
+      onRowOrderChanged,
+      store,
+    });
+    controller.attach(root);
+    return {
+      root,
+      pool,
+      store,
+      controller,
+      onRowOrderChanged,
+      requestSync,
+      getSourceIndex,
+      reader,
+      setDisplayRows: (next: DisplayRowReader) => {
+        currentReader = next;
+      },
+      cleanup: () => {
+        controller.detach();
+        document.body.removeChild(root);
+      },
+    };
+  }
+
+  it("commits a drop before another row using the source insertion index", () => {
+    const d = mountPaged();
+    const moveMany = vi.spyOn(d.store, "moveMany");
+    // r6 is display 1 (midY=60). Drop above r8 (display 3, midY=140) → display 3.
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      130,
+    );
+
+    expect(moveMany).toHaveBeenCalledWith(["r6"], 3);
+    expect(d.onRowOrderChanged).toHaveBeenCalledOnce();
+    expect(d.onRowOrderChanged.mock.calls[0][0]).toMatchObject({
+      rowId: "r6",
+      rowIds: ["r6"],
+      fromIndex: 6,
+      fromIndices: [6],
+      insertionIndex: 8,
+      source: "drag",
+    });
+    d.cleanup();
+  });
+
+  it("commits a drop after a row using the source insertion index", () => {
+    const d = mountPaged();
+    // Drop below r8 (midY=140) and above r9 (midY=180) → display 4 → source 9.
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      150,
+    );
+
+    expect(d.onRowOrderChanged.mock.calls[0][0].insertionIndex).toBe(9);
+    expect(d.onRowOrderChanged.mock.calls[0][0].fromIndex).toBe(6);
+    d.cleanup();
+  });
+
+  it("commits a drop after the final displayed row as last source index + 1", () => {
+    const d = mountPaged();
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      220,
+    );
+
+    expect(d.onRowOrderChanged.mock.calls[0][0].insertionIndex).toBe(10);
+    d.cleanup();
+  });
+
+  it("does not call getSourceIndex during pointermove", () => {
+    const d = mountPaged();
+    const handle = d.pool[1]!.element.querySelector(
+      `.${ROW_DRAG_HANDLE_CLASS}`,
+    ) as HTMLElement;
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 1,
+        button: 0,
+        clientX: 10,
+        clientY: 50,
+      }),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerId: 1,
+        clientX: 10,
+        clientY: nudgeY(50),
+      }),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerId: 1,
+        clientX: 10,
+        clientY: 130,
+      }),
+    );
+    expect(d.getSourceIndex).not.toHaveBeenCalled();
+
+    document.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 1,
+        clientX: 10,
+        clientY: 130,
+      }),
+    );
+    expect(d.getSourceIndex).toHaveBeenCalled();
+    expect(d.getSourceIndex.mock.calls.length).toBeLessThanOrEqual(3);
+    d.cleanup();
+  });
+
+  it("keeps unmanaged pointer indexes in page/display coordinates", () => {
+    const d = mountPaged({ managed: false });
+    const moveMany = vi.spyOn(d.store, "moveMany");
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      130,
+    );
+
+    expect(d.getSourceIndex).not.toHaveBeenCalled();
+    expect(moveMany).toHaveBeenCalledWith(["r6"], 3);
+    expect(d.onRowOrderChanged.mock.calls[0][0]).toMatchObject({
+      rowId: "r6",
+      fromIndex: 1,
+      fromIndices: [1],
+      insertionIndex: 3,
+      source: "drag",
+    });
+    d.cleanup();
+  });
+
+  it("preserves page-1 and pagination-disabled identity mapping", () => {
+    const pageRows: RowData[] = [
+      { id: "r0" }, { id: "r1" }, { id: "r2" }, { id: "r3" }, { id: "r4" },
+    ];
+    const d = mountPaged({
+      pageRows,
+      sourceIndexes: [0, 1, 2, 3, 4],
+    });
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      130,
+    );
+
+    expect(d.onRowOrderChanged.mock.calls[0][0]).toMatchObject({
+      fromIndex: 1,
+      fromIndices: [1],
+      insertionIndex: 3,
+    });
+    d.cleanup();
+  });
+
+  it("does not commit or emit when source-index resolution fails", () => {
+    const d = mountPaged({ sourceIndexes: [-1, -1, -1, -1, -1] });
+    const moveMany = vi.spyOn(d.store, "moveMany");
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      130,
+    );
+
+    expect(moveMany).not.toHaveBeenCalled();
+    expect(d.requestSync).not.toHaveBeenCalled();
+    expect(d.onRowOrderChanged).not.toHaveBeenCalled();
+    d.cleanup();
+  });
+
+  it("commits when the captured DisplayRowReader identity is unchanged", () => {
+    const d = mountPaged();
+    const moveMany = vi.spyOn(d.store, "moveMany");
+    d.setDisplayRows(d.reader);
+    dragHandleTo(
+      d.pool[1]!.element.querySelector(`.${ROW_DRAG_HANDLE_CLASS}`) as HTMLElement,
+      50,
+      130,
+    );
+    expect(moveMany).toHaveBeenCalledWith(["r6"], 3);
+    expect(d.requestSync).toHaveBeenCalledOnce();
+    expect(d.onRowOrderChanged).toHaveBeenCalledOnce();
+    d.cleanup();
+  });
+
+  it("fails closed on pointer-up if the displayed RowView reader was replaced", () => {
+    const d = mountPaged();
+    const moveMany = vi.spyOn(d.store, "moveMany");
+    const handle = d.pool[1]!.element.querySelector(
+      `.${ROW_DRAG_HANDLE_CLASS}`,
+    ) as HTMLElement;
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        pointerId: 1,
+        button: 0,
+        clientX: 10,
+        clientY: 50,
+      }),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerId: 1,
+        clientX: 10,
+        clientY: nudgeY(50),
+      }),
+    );
+    d.setDisplayRows(
+      createMappedDisplayRowReader(
+        [{ id: "r5" }, { id: "r6" }, { id: "r7" }, { id: "r8" }, { id: "r9" }],
+        [5, 6, 7, 8, 9],
+      ),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointerup", {
+        pointerId: 1,
+        clientX: 10,
+        clientY: 130,
+      }),
+    );
+    expect(moveMany).not.toHaveBeenCalled();
+    expect(d.requestSync).not.toHaveBeenCalled();
+    expect(d.onRowOrderChanged).not.toHaveBeenCalled();
+    d.cleanup();
   });
 });
